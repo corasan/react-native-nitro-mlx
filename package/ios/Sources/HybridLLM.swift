@@ -17,6 +17,7 @@ class HybridLLM: HybridLLMSpec {
     private var modelFactory: ModelFactory = LLMModelFactory.shared
     private var manageHistory: Bool = false
     private var messageHistory: [LLMMessage] = []
+    private var loadTask: Task<Void, Error>?
 
     var isLoaded: Bool { session != nil }
     var isGenerating: Bool { currentTask != nil }
@@ -61,50 +62,58 @@ class HybridLLM: HybridLLMSpec {
     }
 
     func load(modelId: String, options: LLMLoadOptions?) throws -> Promise<Void> {
+        self.loadTask?.cancel()
+
         return Promise.async { [self] in
-            MLX.GPU.set(cacheLimit: 2000000)
+            let task = Task { @MainActor in
+                MLX.GPU.set(cacheLimit: 2000000)
 
-            self.currentTask?.cancel()
-            self.currentTask = nil
-            self.session = nil
-            self.container = nil
-            MLX.GPU.clearCache()
+                self.currentTask?.cancel()
+                self.currentTask = nil
+                self.session = nil
+                self.container = nil
+                MLX.GPU.clearCache()
 
-            let memoryAfterCleanup = self.getMemoryUsage()
-            let gpuAfterCleanup = self.getGPUMemoryUsage()
-            log("After cleanup - Host: \(memoryAfterCleanup), GPU: \(gpuAfterCleanup)")
+                let memoryAfterCleanup = self.getMemoryUsage()
+                let gpuAfterCleanup = self.getGPUMemoryUsage()
+                log("After cleanup - Host: \(memoryAfterCleanup), GPU: \(gpuAfterCleanup)")
 
-            let modelDir = await ModelDownloader.shared.getModelDirectory(modelId: modelId)
-            log("Loading from directory: \(modelDir.path)")
+                let modelDir = await ModelDownloader.shared.getModelDirectory(modelId: modelId)
+                log("Loading from directory: \(modelDir.path)")
 
-            let config = ModelConfiguration(directory: modelDir)
-            let loadedContainer = try await modelFactory.loadContainer(
-                configuration: config
-            ) { progress in
-                options?.onProgress?(progress.fractionCompleted)
+                let config = ModelConfiguration(directory: modelDir)
+                let loadedContainer = try await self.modelFactory.loadContainer(
+                    configuration: config
+                ) { progress in
+                    options?.onProgress?(progress.fractionCompleted)
+                }
+
+                try Task.checkCancellation()
+
+                let memoryAfterContainer = self.getMemoryUsage()
+                let gpuAfterContainer = self.getGPUMemoryUsage()
+                log("Model loaded - Host: \(memoryAfterContainer), GPU: \(gpuAfterContainer)")
+
+                let additionalContextDict: [String: Any]? = if let messages = options?.additionalContext {
+                    ["messages": messages.map { ["role": $0.role, "content": $0.content] }]
+                } else {
+                    nil
+                }
+
+                self.container = loadedContainer
+                self.session = ChatSession(loadedContainer, instructions: self.systemPrompt, additionalContext: additionalContextDict)
+                self.modelId = modelId
+
+                self.manageHistory = options?.manageHistory ?? false
+                self.messageHistory = options?.additionalContext ?? []
+
+                if self.manageHistory {
+                    log("History management enabled with \(self.messageHistory.count) initial messages")
+                }
             }
 
-            let memoryAfterContainer = self.getMemoryUsage()
-            let gpuAfterContainer = self.getGPUMemoryUsage()
-            log("Model loaded - Host: \(memoryAfterContainer), GPU: \(gpuAfterContainer)")
-
-            // Convert [LLMMessage]? to [String: Any]?
-            let additionalContextDict: [String: Any]? = if let messages = options?.additionalContext {
-                ["messages": messages.map { ["role": $0.role, "content": $0.content] }]
-            } else {
-                nil
-            }
-
-            self.container = loadedContainer
-            self.session = ChatSession(loadedContainer, instructions: self.systemPrompt, additionalContext: additionalContextDict)
-            self.modelId = modelId
-
-            self.manageHistory = options?.manageHistory ?? false
-            self.messageHistory = options?.additionalContext ?? []
-
-            if self.manageHistory {
-                log("History management enabled with \(self.messageHistory.count) initial messages")
-            }
+            self.loadTask = task
+            try await task.value
         }
     }
 
@@ -211,6 +220,9 @@ class HybridLLM: HybridLLMSpec {
     }
 
     func unload() throws {
+        loadTask?.cancel()
+        loadTask = nil
+
         let memoryBefore = getMemoryUsage()
         let gpuBefore = getGPUMemoryUsage()
         log("Before unload - Host: \(memoryBefore), GPU: \(gpuBefore)")
