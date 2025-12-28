@@ -3,14 +3,24 @@ const path = require('path')
 
 const projectRoot = __dirname
 const monorepoRoot = path.resolve(projectRoot, '../..')
+const isDev = process.env.NODE_ENV !== 'production'
 
 const config = getDefaultConfig(projectRoot)
 
-config.watchFolders = [monorepoRoot]
-config.resolver.nodeModulesPaths = [
+const watchFolders = [monorepoRoot]
+const nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(monorepoRoot, 'node_modules'),
 ]
+
+if (isDev) {
+  const nitroMlxRoot = path.resolve(projectRoot, '../package')
+  watchFolders.push(nitroMlxRoot)
+  nodeModulesPaths.unshift(nitroMlxRoot)
+}
+
+config.watchFolders = watchFolders
+config.resolver.nodeModulesPaths = nodeModulesPaths
 
 config.resolver.assetExts.push('pte')
 config.resolver.assetExts.push('bin')
