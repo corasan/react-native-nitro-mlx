@@ -184,8 +184,8 @@ const MessageItem = ({ content, thinking, isThinking, isUser, toolCall }: Messag
           </Text>
         </View>
       )}
-      {toolCall && <ToolCallBlock toolCall={toolCall} />}
       {thinking && <ThinkingBlock thinking={thinking} />}
+      {toolCall && <ToolCallBlock toolCall={toolCall} />}
       {content ? (
         <Text style={[styles.messageText, { color: textColor }]}>{content}</Text>
       ) : null}
@@ -311,7 +311,10 @@ export default function ChatScreen() {
             fullText.includes('<think>') &&
             fullText.split('<think>').length > fullText.split('</think>').length
 
-          const { thinking, content } = parseThinkingBlocks(fullText)
+          const { thinking, content: parsedContent } = parseThinkingBlocks(fullText)
+          const content = hasUnclosedThink
+            ? parsedContent.replace(/<think>[\s\S]*$/, '').trim()
+            : parsedContent
           const combinedThinking = accumulatedThinking
             ? `${accumulatedThinking}\n\n${thinking}`.trim()
             : thinking
