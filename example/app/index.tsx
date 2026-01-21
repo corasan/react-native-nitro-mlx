@@ -47,8 +47,6 @@ const weatherTool = createTool({
         }
       }
 
-      console.log('TEMPERATURE', result.main.temp)
-
       return {
         temperature: result.main.temp,
         humidity: result.main.humidity || 0,
