@@ -213,7 +213,6 @@ export default function ChatScreen() {
   const listRef = useRef<LegendListRef>(null)
   const inputRef = useRef<TextInput>(null)
   const isLoadingRef = useRef(false)
-  const toolCallsRef = useRef<ToolCallsStatus>([])
   const { addResult } = useBenchmark()
 
   LLM.debug = true
@@ -278,7 +277,6 @@ export default function ChatScreen() {
 
     const currentPrompt = prompt
     const assistantMessageId = Crypto.randomUUID()
-    toolCallsRef.current = []
     const tempAssistantMessage: Message = {
       id: assistantMessageId,
       content: '',
@@ -339,13 +337,14 @@ export default function ChatScreen() {
             ),
           )
         },
-        toolCallInfo => {
-          const newToolCall = { name: toolCallInfo.name, args: toolCallInfo.arguments }
-          toolCallsRef.current.push(newToolCall)
-          const currentCalls = [...toolCallsRef.current]
+        ({ allToolCalls }) => {
+          const toolCalls = allToolCalls.map(tc => ({
+            name: tc.name,
+            args: tc.arguments,
+          }))
           setMessages(prev =>
             prev.map(msg =>
-              msg.id === assistantMessageId ? { ...msg, toolCalls: currentCalls } : msg,
+              msg.id === assistantMessageId ? { ...msg, toolCalls } : msg,
             ),
           )
         },

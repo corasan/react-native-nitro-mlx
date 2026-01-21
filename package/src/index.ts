@@ -1,4 +1,4 @@
-export { LLM, type Message, type ToolCallInfo } from './llm'
+export { LLM, type Message, type ToolCallInfo, type ToolCallUpdate } from './llm'
 export { ModelManager } from './modelManager'
 export {
   MLXModel,
