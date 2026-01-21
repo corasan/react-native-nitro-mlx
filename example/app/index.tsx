@@ -14,11 +14,76 @@ import {
   View,
 } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
-import { LLM, MLXModel, ModelManager } from 'react-native-nitro-mlx'
+import { createTool, LLM, MLXModel, ModelManager } from 'react-native-nitro-mlx'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { z } from 'zod'
 import { useBenchmark } from '../components/benchmark-context'
 
-const MODEL_ID = MLXModel.Llama_3_2_1B_Instruct_4bit
+const MODEL_ID = MLXModel.Qwen3_1_7B_4bit
+
+const WEATHER_API_KEY = process.env.EXPO_PUBLIC_WEATHER_API_KEY
+const BASE_URL = 'https://api.openweathermap.org/data/2.5/weather?units=imperial'
+
+const weatherTool = createTool({
+  name: 'weather_tool',
+  description: 'A weather tool that can get current weather information for any city.',
+  arguments: z.object({
+    city: z.string(),
+  }),
+  handler: async args => {
+    try {
+      const url = `${BASE_URL}&q=${args.city}&APPID=${WEATHER_API_KEY}`
+      const res = await fetch(url, { method: 'GET' })
+      const result = await res.json()
+
+      if (!result.main) {
+        console.error('Invalid API response:', result)
+        return {
+          temperature: 0,
+          humidity: 0,
+          precipitation: 'Unknown',
+          units: 'imperial',
+        }
+      }
+
+      console.log('TEMPERATURE', result.main.temp)
+
+      return {
+        temperature: result.main.temp,
+        humidity: result.main.humidity || 0,
+        precipitation: result.weather?.[0]?.description || 'Unknown',
+        units: 'imperial',
+      }
+    } catch (error) {
+      console.error('Weather tool error:', error)
+      return { temperature: 0, humidity: 0, precipitation: 'Unknown', units: 'imperial' }
+    }
+  },
+})
+
+type ToolCallStatus = {
+  name: string
+  args: Record<string, unknown>
+  completed?: boolean
+}
+
+function parseThinkingBlocks(text: string): { thinking: string; content: string } {
+  const thinkRegex = /<think>([\s\S]*?)<\/think>/g
+  const thinkingParts: string[] = []
+  let content = text
+
+  let match
+  while ((match = thinkRegex.exec(text)) !== null) {
+    thinkingParts.push(match[1].trim())
+  }
+
+  content = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+
+  return {
+    thinking: thinkingParts.join('\n\n'),
+    content,
+  }
+}
 
 type Message = {
   id: string
@@ -26,6 +91,51 @@ type Message = {
   thinking?: string
   isThinking?: boolean
   isUser: boolean
+  toolCall?: ToolCallStatus
+}
+
+const ToolCallBlock = ({ toolCall }: { toolCall: ToolCallStatus }) => {
+  const [expanded, setExpanded] = useState(false)
+  const colorScheme = useColorScheme()
+
+  const toggleExpanded = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+    setExpanded(!expanded)
+  }
+
+  const toolDisplayName = toolCall.name
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+
+  return (
+    <TouchableOpacity onPress={toggleExpanded} style={styles.toolCallBlock}>
+      <View style={styles.toolCallHeader}>
+        <Text style={styles.toolCallIcon}>🔧</Text>
+        <Text style={styles.toolCallLabel}>
+          {toolCall.completed ? 'Used' : 'Using'} {toolDisplayName}
+        </Text>
+        {toolCall.completed ? (
+          <Text style={styles.toolCallComplete}>✓</Text>
+        ) : (
+          <ActivityIndicator
+            size="small"
+            color="#007AFF"
+            style={styles.toolCallSpinner}
+          />
+        )}
+      </View>
+      {expanded && (
+        <Text
+          style={[
+            styles.toolCallArgs,
+            { color: colorScheme === 'dark' ? '#aaa' : '#666' },
+          ]}
+        >
+          {JSON.stringify(toolCall.args, null, 2)}
+        </Text>
+      )}
+    </TouchableOpacity>
+  )
 }
 
 const ThinkingBlock = ({ thinking }: { thinking: string }) => {
@@ -52,7 +162,7 @@ const ThinkingBlock = ({ thinking }: { thinking: string }) => {
   )
 }
 
-const MessageItem = ({ content, thinking, isThinking, isUser }: Message) => {
+const MessageItem = ({ content, thinking, isThinking, isUser, toolCall }: Message) => {
   const colorScheme = useColorScheme()
   const textColor = colorScheme === 'dark' ? 'white' : 'black'
 
@@ -66,7 +176,7 @@ const MessageItem = ({ content, thinking, isThinking, isUser }: Message) => {
 
   return (
     <View style={styles.message}>
-      {isThinking && !content && (
+      {isThinking && !content && !toolCall && (
         <View style={styles.thinkingIndicator}>
           <ActivityIndicator size="small" color="#888" />
           <Text style={[styles.thinkingIndicatorText, { color: textColor }]}>
@@ -74,6 +184,7 @@ const MessageItem = ({ content, thinking, isThinking, isUser }: Message) => {
           </Text>
         </View>
       )}
+      {toolCall && <ToolCallBlock toolCall={toolCall} />}
       {thinking && <ThinkingBlock thinking={thinking} />}
       {content ? (
         <Text style={[styles.messageText, { color: textColor }]}>{content}</Text>
@@ -101,11 +212,11 @@ export default function ChatScreen() {
 
   LLM.debug = true
 
-  useEffect(() => {
-    return () => {
-      LLM.unload()
-    }
-  }, [])
+  // useEffect(() => {
+  //   return () => {
+  //     LLM.unload()
+  //   }
+  // }, [])
 
   const openSettings = () => {
     router.push('/settings-modal')
@@ -137,10 +248,12 @@ export default function ChatScreen() {
       setIsLoading(true)
       setLoadProgress(0)
       try {
+        LLM.systemPrompt =
+          'You are a helpful assistant. When users ask about weather, use the weather_tool to get current information.'
         await LLM.load(MODEL_ID, {
           onProgress: setLoadProgress,
-          // additionalContext: [{ role: 'user', content: 'What is quantum computing?' }],
           manageHistory: true,
+          tools: [weatherTool],
         })
         setIsReady(true)
       } catch (error) {
@@ -177,46 +290,67 @@ export default function ChatScreen() {
     setIsGenerating(true)
 
     let fullText = ''
-    let isInThinkingBlock = false
+    let accumulatedThinking = ''
 
     try {
-      await LLM.stream(currentPrompt, token => {
-        fullText += token
-
-        const thinkStart = fullText.indexOf('<think>')
-        const thinkEnd = fullText.indexOf('</think>')
-
-        let thinkingContent = ''
-        let responseContent = ''
-
-        if (thinkStart !== -1) {
-          if (thinkEnd !== -1) {
-            thinkingContent = fullText.slice(thinkStart + 7, thinkEnd).trim()
-            responseContent = fullText.slice(thinkEnd + 8).trim()
-            isInThinkingBlock = false
-          } else {
-            thinkingContent = fullText.slice(thinkStart + 7).trim()
-            isInThinkingBlock = true
+      await LLM.streamWithTools(
+        currentPrompt,
+        token => {
+          if (token === '\u200B') {
+            const { thinking } = parseThinkingBlocks(fullText)
+            if (thinking) {
+              accumulatedThinking = thinking
+            }
+            fullText = ''
+            return
           }
-        } else {
-          responseContent = fullText.trim()
-        }
 
-        setMessages(prev =>
-          prev.map(msg =>
-            msg.id === assistantMessageId
-              ? {
-                  ...msg,
-                  thinking: thinkingContent,
-                  content: responseContent,
-                  isThinking: isInThinkingBlock,
-                }
-              : msg,
-          ),
-        )
-      })
+          fullText += token
 
-      syncFromHistory()
+          const hasUnclosedThink =
+            fullText.includes('<think>') &&
+            fullText.split('<think>').length > fullText.split('</think>').length
+
+          const { thinking, content } = parseThinkingBlocks(fullText)
+          const combinedThinking = accumulatedThinking
+            ? `${accumulatedThinking}\n\n${thinking}`.trim()
+            : thinking
+
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === assistantMessageId
+                ? {
+                    ...msg,
+                    thinking: combinedThinking || msg.thinking,
+                    content,
+                    isThinking: hasUnclosedThink,
+                  }
+                : msg,
+            ),
+          )
+        },
+        toolCallInfo => {
+          console.log('Tool called:', toolCallInfo.name, toolCallInfo.arguments)
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === assistantMessageId
+                ? {
+                    ...msg,
+                    toolCall: { name: toolCallInfo.name, args: toolCallInfo.arguments },
+                  }
+                : msg,
+            ),
+          )
+        },
+      )
+
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === assistantMessageId && msg.toolCall
+            ? { ...msg, toolCall: { ...msg.toolCall, completed: true } }
+            : msg,
+        ),
+      )
 
       const stats = LLM.getLastGenerationStats()
       addResult({
@@ -250,38 +384,39 @@ export default function ChatScreen() {
     }
   }
 
-  const syncFromHistory = useCallback(() => {
+  const syncFromHistory = useCallback((preserveToolCalls = false) => {
     try {
       const history = LLM.getHistory()
-      const uiMessages: Message[] = history.map((msg, index) => {
-        if (msg.role === 'user') {
+      setMessages(prev => {
+        const toolCallMap = new Map<number, ToolCallStatus>()
+        if (preserveToolCalls) {
+          prev.forEach((msg, idx) => {
+            if (msg.toolCall) {
+              toolCallMap.set(idx, msg.toolCall)
+            }
+          })
+        }
+
+        return history.map((msg, index) => {
+          if (msg.role === 'user') {
+            return {
+              id: `history-${index}`,
+              content: msg.content,
+              isUser: true,
+            }
+          }
+
+          const { thinking, content } = parseThinkingBlocks(msg.content)
+
           return {
             id: `history-${index}`,
-            content: msg.content,
-            isUser: true,
+            content,
+            thinking,
+            isUser: false,
+            toolCall: toolCallMap.get(index),
           }
-        }
-
-        const fullText = msg.content
-        const thinkStart = fullText.indexOf('<think>')
-        const thinkEnd = fullText.indexOf('</think>')
-
-        let thinking = ''
-        let content = fullText
-
-        if (thinkStart !== -1 && thinkEnd !== -1) {
-          thinking = fullText.slice(thinkStart + 7, thinkEnd).trim()
-          content = fullText.slice(thinkEnd + 8).trim()
-        }
-
-        return {
-          id: `history-${index}`,
-          content,
-          thinking,
-          isUser: false,
-        }
+        })
       })
-      setMessages(uiMessages)
     } catch (error) {
       console.error('Error syncing from history:', error)
     }
@@ -569,6 +704,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
     opacity: 0.7,
+  },
+  toolCallBlock: {
+    backgroundColor: '#007AFF15',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#007AFF',
+  },
+  toolCallHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  toolCallIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  toolCallLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#007AFF',
+    flex: 1,
+  },
+  toolCallSpinner: {
+    marginLeft: 8,
+  },
+  toolCallComplete: {
+    color: '#34C759',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  toolCallArgs: {
+    fontSize: 11,
+    fontFamily: 'Menlo',
+    marginTop: 8,
   },
   thinkingBlock: {
     backgroundColor: '#8881',
