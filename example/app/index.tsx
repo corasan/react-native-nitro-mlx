@@ -296,7 +296,7 @@ export default function ChatScreen() {
     let accumulatedThinking = ''
 
     try {
-      await LLM.streamWithTools(
+      await LLM.stream(
         currentPrompt,
         token => {
           if (token === '\u200B') {

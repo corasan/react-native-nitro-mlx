@@ -387,6 +387,21 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
     return Func_void_std__string_std__string_Wrapper(std::move(value));
   }
   
+  // pragma MARK: std::optional<std::function<void(const std::string& /* toolName */, const std::string& /* args */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(const std::string& / * toolName * /, const std::string& / * args * /)>>`.
+   */
+  using std__optional_std__function_void_const_std__string_____toolName_____const_std__string_____args______ = std::optional<std::function<void(const std::string& /* toolName */, const std::string& /* args */)>>;
+  inline std::optional<std::function<void(const std::string& /* toolName */, const std::string& /* args */)>> create_std__optional_std__function_void_const_std__string_____toolName_____const_std__string_____args______(const std::function<void(const std::string& /* toolName */, const std::string& /* args */)>& value) noexcept {
+    return std::optional<std::function<void(const std::string& /* toolName */, const std::string& /* args */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_const_std__string_____toolName_____const_std__string_____args______(const std::optional<std::function<void(const std::string& /* toolName */, const std::string& /* args */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(const std::string& /* toolName */, const std::string& /* args */)> get_std__optional_std__function_void_const_std__string_____toolName_____const_std__string_____args______(const std::optional<std::function<void(const std::string& /* toolName */, const std::string& /* args */)>>& optional) noexcept {
+    return *optional;
+  }
+  
   // pragma MARK: std::shared_ptr<HybridLLMSpec>
   /**
    * Specialized version of `std::shared_ptr<HybridLLMSpec>`.

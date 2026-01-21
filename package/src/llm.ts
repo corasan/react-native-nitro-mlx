@@ -68,17 +68,7 @@ export const LLM = {
   },
 
   /**
-   * Stream a response token by token.
-   * @param prompt - The input text to generate a response for
-   * @param onToken - Callback invoked for each generated token
-   * @returns The complete generated text
-   */
-  stream(prompt: string, onToken: (token: string) => void): Promise<string> {
-    return getInstance().stream(prompt, onToken)
-  },
-
-  /**
-   * Stream a response with tool calling support.
+   * Stream a response token by token with optional tool calling support.
    * Tools must be provided when loading the model via `load()` options.
    * Tools are automatically executed when the model calls them.
    * @param prompt - The input text to generate a response for
@@ -87,37 +77,33 @@ export const LLM = {
    *   Receives the current tool call and an accumulated array of all tool calls so far.
    * @returns The complete generated text
    */
-  streamWithTools(
+  stream(
     prompt: string,
     onToken: (token: string) => void,
     onToolCall?: (update: ToolCallUpdate) => void,
   ): Promise<string> {
     const accumulatedToolCalls: ToolCallInfo[] = []
 
-    return getInstance().streamWithTools(
-      prompt,
-      onToken,
-      (name: string, argsJson: string) => {
-        if (onToolCall) {
-          try {
-            const args = JSON.parse(argsJson) as Record<string, unknown>
-            const toolCall = { name, arguments: args }
-            accumulatedToolCalls.push(toolCall)
-            onToolCall({
-              toolCall,
-              allToolCalls: [...accumulatedToolCalls],
-            })
-          } catch {
-            const toolCall = { name, arguments: {} }
-            accumulatedToolCalls.push(toolCall)
-            onToolCall({
-              toolCall,
-              allToolCalls: [...accumulatedToolCalls],
-            })
-          }
+    return getInstance().stream(prompt, onToken, (name: string, argsJson: string) => {
+      if (onToolCall) {
+        try {
+          const args = JSON.parse(argsJson) as Record<string, unknown>
+          const toolCall = { name, arguments: args }
+          accumulatedToolCalls.push(toolCall)
+          onToolCall({
+            toolCall,
+            allToolCalls: [...accumulatedToolCalls],
+          })
+        } catch {
+          const toolCall = { name, arguments: {} }
+          accumulatedToolCalls.push(toolCall)
+          onToolCall({
+            toolCall,
+            allToolCalls: [...accumulatedToolCalls],
+          })
         }
-      },
-    )
+      }
+    })
   },
 
   /**

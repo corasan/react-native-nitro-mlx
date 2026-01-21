@@ -72,25 +72,17 @@ export interface LLM extends HybridObject<{ ios: 'swift' }> {
   generate(prompt: string): Promise<string>
 
   /**
-   * Stream a response token by token.
-   * @param prompt - The input text to generate a response for
-   * @param onToken - Callback invoked for each generated token
-   * @returns The complete generated text
-   */
-  stream(prompt: string, onToken: (token: string) => void): Promise<string>
-
-  /**
-   * Stream a response with tool calling support.
+   * Stream a response token by token with optional tool calling support.
    * Tools are automatically executed when the model calls them.
    * @param prompt - The input text to generate a response for
    * @param onToken - Callback invoked for each generated token
    * @param onToolCall - Optional callback invoked when a tool is called (for UI feedback)
    * @returns The complete generated text
    */
-  streamWithTools(
+  stream(
     prompt: string,
     onToken: (token: string) => void,
-    onToolCall: (toolName: string, args: string) => void,
+    onToolCall?: (toolName: string, args: string) => void,
   ): Promise<string>
 
   /**

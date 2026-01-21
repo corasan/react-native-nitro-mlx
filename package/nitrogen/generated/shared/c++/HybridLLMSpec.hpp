@@ -68,8 +68,7 @@ namespace margelo::nitro::mlxreactnative {
       // Methods
       virtual std::shared_ptr<Promise<void>> load(const std::string& modelId, const std::optional<LLMLoadOptions>& options) = 0;
       virtual std::shared_ptr<Promise<std::string>> generate(const std::string& prompt) = 0;
-      virtual std::shared_ptr<Promise<std::string>> stream(const std::string& prompt, const std::function<void(const std::string& /* token */)>& onToken) = 0;
-      virtual std::shared_ptr<Promise<std::string>> streamWithTools(const std::string& prompt, const std::function<void(const std::string& /* token */)>& onToken, const std::function<void(const std::string& /* toolName */, const std::string& /* args */)>& onToolCall) = 0;
+      virtual std::shared_ptr<Promise<std::string>> stream(const std::string& prompt, const std::function<void(const std::string& /* token */)>& onToken, const std::optional<std::function<void(const std::string& /* toolName */, const std::string& /* args */)>>& onToolCall) = 0;
       virtual void stop() = 0;
       virtual void unload() = 0;
       virtual GenerationStats getLastGenerationStats() = 0;

@@ -24,7 +24,6 @@ namespace margelo::nitro::mlxreactnative {
       prototype.registerHybridMethod("load", &HybridLLMSpec::load);
       prototype.registerHybridMethod("generate", &HybridLLMSpec::generate);
       prototype.registerHybridMethod("stream", &HybridLLMSpec::stream);
-      prototype.registerHybridMethod("streamWithTools", &HybridLLMSpec::streamWithTools);
       prototype.registerHybridMethod("stop", &HybridLLMSpec::stop);
       prototype.registerHybridMethod("unload", &HybridLLMSpec::unload);
       prototype.registerHybridMethod("getLastGenerationStats", &HybridLLMSpec::getLastGenerationStats);

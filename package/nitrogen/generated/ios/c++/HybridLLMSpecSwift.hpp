@@ -117,16 +117,8 @@ namespace margelo::nitro::mlxreactnative {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::shared_ptr<Promise<std::string>> stream(const std::string& prompt, const std::function<void(const std::string& /* token */)>& onToken) override {
-      auto __result = _swiftPart.stream(prompt, onToken);
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
-    inline std::shared_ptr<Promise<std::string>> streamWithTools(const std::string& prompt, const std::function<void(const std::string& /* token */)>& onToken, const std::function<void(const std::string& /* toolName */, const std::string& /* args */)>& onToolCall) override {
-      auto __result = _swiftPart.streamWithTools(prompt, onToken, onToolCall);
+    inline std::shared_ptr<Promise<std::string>> stream(const std::string& prompt, const std::function<void(const std::string& /* token */)>& onToken, const std::optional<std::function<void(const std::string& /* toolName */, const std::string& /* args */)>>& onToolCall) override {
+      auto __result = _swiftPart.stream(prompt, onToken, onToolCall);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

@@ -192,74 +192,12 @@ class HybridLLM: HybridLLMSpec {
         }
     }
 
-    func stream(prompt: String, onToken: @escaping (String) -> Void) throws -> Promise<String> {
-        guard let session = session else {
-            throw LLMError.notLoaded
-        }
-
-        return Promise.async { [self] in
-            if self.manageHistory {
-                self.messageHistory.append(LLMMessage(role: "user", content: prompt))
-            }
-
-            let task = Task<String, Error> {
-                var result = ""
-                var tokenCount = 0
-                let startTime = Date()
-                var firstTokenTime: Date?
-
-                log("Streaming response for: \(prompt.prefix(50))...")
-                for try await chunk in session.streamResponse(to: prompt) {
-                    if Task.isCancelled { break }
-
-                    if firstTokenTime == nil {
-                        firstTokenTime = Date()
-                    }
-                    tokenCount += 1
-                    result += chunk
-                    onToken(chunk)
-                }
-
-                let endTime = Date()
-                let totalTime = endTime.timeIntervalSince(startTime) * 1000
-                let timeToFirstToken = (firstTokenTime ?? endTime).timeIntervalSince(startTime) * 1000
-                let tokensPerSecond = totalTime > 0 ? Double(tokenCount) / (totalTime / 1000) : 0
-
-                self.lastStats = GenerationStats(
-                    tokenCount: Double(tokenCount),
-                    tokensPerSecond: tokensPerSecond,
-                    timeToFirstToken: timeToFirstToken,
-                    totalTime: totalTime
-                )
-
-                log("Stream complete - \(tokenCount) tokens, \(String(format: "%.1f", tokensPerSecond)) tokens/s")
-                return result
-            }
-
-            self.currentTask = task
-
-            do {
-                let result = try await task.value
-                self.currentTask = nil
-
-                if self.manageHistory {
-                    self.messageHistory.append(LLMMessage(role: "assistant", content: result))
-                }
-
-                return result
-            } catch {
-                self.currentTask = nil
-                throw error
-            }
-        }
-    }
-
     private let maxToolCallDepth = 10
 
-    func streamWithTools(
+    func stream(
         prompt: String,
         onToken: @escaping (String) -> Void,
-        onToolCall: @escaping (String, String) -> Void
+        onToolCall: ((String, String) -> Void)?
     ) throws -> Promise<String> {
         guard let container = container as? ModelContainer else {
             throw LLMError.notLoaded
@@ -287,7 +225,7 @@ class HybridLLM: HybridLLMSpec {
                         tokenCount += 1
                         onToken(token)
                     },
-                    onToolCall: onToolCall
+                    onToolCall: onToolCall ?? { _, _ in }
                 )
 
                 let endTime = Date()
@@ -302,7 +240,7 @@ class HybridLLM: HybridLLMSpec {
                     totalTime: totalTime
                 )
 
-                log("Stream with tools complete - \(tokenCount) tokens")
+                log("Stream complete - \(tokenCount) tokens, \(String(format: "%.1f", tokensPerSecond)) tokens/s")
                 return result
             }
 
