@@ -1,8 +1,8 @@
 import type { AnyMap } from 'react-native-nitro-modules'
-import { z } from 'zod'
+import type { z } from 'zod'
 import type { ToolDefinition, ToolParameter, ToolParameterType } from './specs/LLM.nitro'
 
-type ZodObjectSchema = z.ZodObject<z.ZodRawShape>
+type ZodObjectSchema = z.ZodObject<z.core.$ZodShape>
 type InferArgs<T extends ZodObjectSchema> = z.infer<T>
 
 export interface TypeSafeToolDefinition<T extends ZodObjectSchema> {
@@ -12,42 +12,40 @@ export interface TypeSafeToolDefinition<T extends ZodObjectSchema> {
   handler: (args: InferArgs<T>) => Promise<Record<string, unknown>>
 }
 
-function getZodTypeString(zodType: z.ZodTypeAny): ToolParameterType {
-  const typeName = zodType._def.typeName
+function getZodTypeString(zodType: z.ZodType): ToolParameterType {
+  const typeName = zodType._zod.def.type
   switch (typeName) {
-    case z.ZodFirstPartyTypeKind.ZodString:
+    case 'string':
       return 'string'
-    case z.ZodFirstPartyTypeKind.ZodNumber:
+    case 'number':
+    case 'int':
       return 'number'
-    case z.ZodFirstPartyTypeKind.ZodBoolean:
+    case 'boolean':
       return 'boolean'
-    case z.ZodFirstPartyTypeKind.ZodArray:
+    case 'array':
       return 'array'
-    case z.ZodFirstPartyTypeKind.ZodObject:
+    case 'object':
       return 'object'
-    case z.ZodFirstPartyTypeKind.ZodOptional:
-      return getZodTypeString((zodType as z.ZodOptional<z.ZodTypeAny>)._def.innerType)
-    case z.ZodFirstPartyTypeKind.ZodDefault:
-      return getZodTypeString((zodType as z.ZodDefault<z.ZodTypeAny>)._def.innerType)
+    case 'optional':
+      return getZodTypeString((zodType as z.ZodOptional<z.ZodType>)._zod.def.innerType)
+    case 'default':
+      return getZodTypeString((zodType as z.ZodDefault<z.ZodType>)._zod.def.innerType)
     default:
       return 'string'
   }
 }
 
-function isZodOptional(zodType: z.ZodTypeAny): boolean {
-  const typeName = zodType._def.typeName
-  return (
-    typeName === z.ZodFirstPartyTypeKind.ZodOptional ||
-    typeName === z.ZodFirstPartyTypeKind.ZodDefault
-  )
+function isZodOptional(zodType: z.ZodType): boolean {
+  const typeName = zodType._zod.def.type
+  return typeName === 'optional' || typeName === 'default'
 }
 
 function zodSchemaToParameters(schema: ZodObjectSchema): ToolParameter[] {
-  const shape = schema.shape
+  const shape = schema._zod.def.shape
   const parameters: ToolParameter[] = []
 
   for (const [key, zodType] of Object.entries(shape)) {
-    const zType = zodType as z.ZodTypeAny
+    const zType = zodType as z.ZodType
     parameters.push({
       name: key,
       type: getZodTypeString(zType),

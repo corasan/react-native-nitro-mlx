@@ -73,9 +73,10 @@ function parseThinkingBlocks(text: string): { thinking: string; content: string 
   const thinkingParts: string[] = []
   let content = text
 
-  let match
-  while ((match = thinkRegex.exec(text)) !== null) {
+  let match: RegExpExecArray | null = thinkRegex.exec(text)
+  while (match !== null) {
     thinkingParts.push(match[1].trim())
+    match = thinkRegex.exec(text)
   }
 
   content = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
