@@ -1,4 +1,4 @@
-import type { HybridObject } from 'react-native-nitro-modules'
+import type { AnyMap, HybridObject } from 'react-native-nitro-modules'
 
 /**
  * Statistics from the last text generation.
@@ -19,6 +19,26 @@ export interface LLMMessage {
   content: string
 }
 
+/**
+ * Parameter definition for a tool.
+ */
+export interface ToolParameter {
+  name: string
+  type: string
+  description: string
+  required: boolean
+}
+
+/**
+ * Tool definition that can be called by the model.
+ */
+export interface ToolDefinition {
+  name: string
+  description: string
+  parameters: ToolParameter[]
+  handler: (args: AnyMap) => Promise<AnyMap>
+}
+
 /** Options for loading a model.
  */
 export interface LLMLoadOptions {
@@ -28,6 +48,8 @@ export interface LLMLoadOptions {
   additionalContext?: LLMMessage[]
   /** Whether to automatically manage message history */
   manageHistory?: boolean
+  /** Tools available for the model to call */
+  tools?: ToolDefinition[]
 }
 
 /**
@@ -56,6 +78,20 @@ export interface LLM extends HybridObject<{ ios: 'swift' }> {
    * @returns The complete generated text
    */
   stream(prompt: string, onToken: (token: string) => void): Promise<string>
+
+  /**
+   * Stream a response with tool calling support.
+   * Tools are automatically executed when the model calls them.
+   * @param prompt - The input text to generate a response for
+   * @param onToken - Callback invoked for each generated token
+   * @param onToolCall - Optional callback invoked when a tool is called (for UI feedback)
+   * @returns The complete generated text
+   */
+  streamWithTools(
+    prompt: string,
+    onToken: (token: string) => void,
+    onToolCall: (toolName: string, args: string) => void,
+  ): Promise<string>
 
   /**
    * Stop the current generation.
@@ -96,3 +132,9 @@ export interface LLM extends HybridObject<{ ios: 'swift' }> {
   /** System prompt used when loading the model */
   systemPrompt: string
 }
+
+/**
+ * Supported parameter types for tool definitions.
+ * Used for type safety in createTool().
+ */
+export type ToolParameterType = 'string' | 'number' | 'boolean' | 'array' | 'object'

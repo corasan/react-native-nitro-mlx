@@ -68,7 +68,11 @@
   "peerDependencies": {
     "react": "*",
     "react-native": "*",
-    "react-native-nitro-modules": "*"
+    "react-native-nitro-modules": "*",
+    "zod": ">=3.0.0"
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
   },
   "release-it": {
     "npm": {

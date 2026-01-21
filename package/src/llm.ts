@@ -8,6 +8,11 @@ export type Message = {
   content: string
 }
 
+export type ToolCallInfo = {
+  name: string
+  arguments: Record<string, unknown>
+}
+
 function getInstance(): LLMSpec {
   if (!instance) {
     instance = NitroModules.createHybridObject<LLMSpec>('LLM')
@@ -65,6 +70,36 @@ export const LLM = {
    */
   stream(prompt: string, onToken: (token: string) => void): Promise<string> {
     return getInstance().stream(prompt, onToken)
+  },
+
+  /**
+   * Stream a response with tool calling support.
+   * Tools must be provided when loading the model via `load()` options.
+   * Tools are automatically executed when the model calls them.
+   * @param prompt - The input text to generate a response for
+   * @param onToken - Callback invoked for each generated token
+   * @param onToolCall - Optional callback invoked when a tool is called (for UI feedback)
+   * @returns The complete generated text
+   */
+  streamWithTools(
+    prompt: string,
+    onToken: (token: string) => void,
+    onToolCall?: (info: ToolCallInfo) => void,
+  ): Promise<string> {
+    return getInstance().streamWithTools(
+      prompt,
+      onToken,
+      (name: string, argsJson: string) => {
+        if (onToolCall) {
+          try {
+            const args = JSON.parse(argsJson) as Record<string, unknown>
+            onToolCall({ name, arguments: args })
+          } catch {
+            onToolCall({ name, arguments: {} })
+          }
+        }
+      },
+    )
   },
 
   /**
