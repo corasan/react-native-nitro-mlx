@@ -15,7 +15,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.reactnative.mlx.example"
+      "bundleIdentifier": "com.reactnative.mlx.example",
+      "appleTeamId": "M52W2L8ZQV"
     },
     "android": {
       "adaptiveIcon": {
@@ -46,4 +47,3 @@
     }
   }
 }
-
