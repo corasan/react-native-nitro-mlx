@@ -26,9 +26,10 @@ const BASE_URL = 'https://api.openweathermap.org/data/2.5/weather?units=imperial
 
 const weatherTool = createTool({
   name: 'weather_tool',
-  description: 'A weather tool that can get current weather information for any city.',
+  description:
+    'Get current weather for a SINGLE city. Call this tool once per city. If comparing multiple cities, make separate calls for each.',
   arguments: z.object({
-    city: z.string(),
+    city: z.string().describe('A single city name'),
   }),
   handler: async args => {
     try {
@@ -67,6 +68,8 @@ type ToolCallStatus = {
   completed?: boolean
 }
 
+type ToolCallsStatus = ToolCallStatus[]
+
 function parseThinkingBlocks(text: string): { thinking: string; content: string } {
   const thinkRegex = /<think>([\s\S]*?)<\/think>/g
   const thinkingParts: string[] = []
@@ -91,7 +94,7 @@ type Message = {
   thinking?: string
   isThinking?: boolean
   isUser: boolean
-  toolCall?: ToolCallStatus
+  toolCalls?: ToolCallsStatus
 }
 
 const ToolCallBlock = ({ toolCall }: { toolCall: ToolCallStatus }) => {
@@ -162,7 +165,7 @@ const ThinkingBlock = ({ thinking }: { thinking: string }) => {
   )
 }
 
-const MessageItem = ({ content, thinking, isThinking, isUser, toolCall }: Message) => {
+const MessageItem = ({ content, thinking, isThinking, isUser, toolCalls }: Message) => {
   const colorScheme = useColorScheme()
   const textColor = colorScheme === 'dark' ? 'white' : 'black'
 
@@ -176,7 +179,7 @@ const MessageItem = ({ content, thinking, isThinking, isUser, toolCall }: Messag
 
   return (
     <View style={styles.message}>
-      {isThinking && !content && !toolCall && (
+      {isThinking && !content && (!toolCalls || toolCalls.length === 0) && (
         <View style={styles.thinkingIndicator}>
           <ActivityIndicator size="small" color="#888" />
           <Text style={[styles.thinkingIndicatorText, { color: textColor }]}>
@@ -185,7 +188,9 @@ const MessageItem = ({ content, thinking, isThinking, isUser, toolCall }: Messag
         </View>
       )}
       {thinking && <ThinkingBlock thinking={thinking} />}
-      {toolCall && <ToolCallBlock toolCall={toolCall} />}
+      {toolCalls?.map((toolCall, index) => (
+        <ToolCallBlock key={`${toolCall.name}-${index}`} toolCall={toolCall} />
+      ))}
       {content ? (
         <Text style={[styles.messageText, { color: textColor }]}>{content}</Text>
       ) : null}
@@ -208,6 +213,7 @@ export default function ChatScreen() {
   const listRef = useRef<LegendListRef>(null)
   const inputRef = useRef<TextInput>(null)
   const isLoadingRef = useRef(false)
+  const toolCallsRef = useRef<ToolCallsStatus>([])
   const { addResult } = useBenchmark()
 
   LLM.debug = true
@@ -249,7 +255,7 @@ export default function ChatScreen() {
       setLoadProgress(0)
       try {
         LLM.systemPrompt =
-          'You are a helpful assistant. When users ask about weather, use the weather_tool to get current information.'
+          'You are a helpful assistant. When users ask about weather, use the weather_tool to get current information. IMPORTANT: If asked about multiple cities, you MUST call weather_tool separately for each city - never assume they have the same weather.'
         await LLM.load(MODEL_ID, {
           onProgress: setLoadProgress,
           manageHistory: true,
@@ -272,6 +278,7 @@ export default function ChatScreen() {
 
     const currentPrompt = prompt
     const assistantMessageId = Crypto.randomUUID()
+    toolCallsRef.current = []
     const tempAssistantMessage: Message = {
       id: assistantMessageId,
       content: '',
@@ -333,15 +340,12 @@ export default function ChatScreen() {
           )
         },
         toolCallInfo => {
-          console.log('Tool called:', toolCallInfo.name, toolCallInfo.arguments)
+          const newToolCall = { name: toolCallInfo.name, args: toolCallInfo.arguments }
+          toolCallsRef.current.push(newToolCall)
+          const currentCalls = [...toolCallsRef.current]
           setMessages(prev =>
             prev.map(msg =>
-              msg.id === assistantMessageId
-                ? {
-                    ...msg,
-                    toolCall: { name: toolCallInfo.name, args: toolCallInfo.arguments },
-                  }
-                : msg,
+              msg.id === assistantMessageId ? { ...msg, toolCalls: currentCalls } : msg,
             ),
           )
         },
@@ -349,8 +353,11 @@ export default function ChatScreen() {
 
       setMessages(prev =>
         prev.map(msg =>
-          msg.id === assistantMessageId && msg.toolCall
-            ? { ...msg, toolCall: { ...msg.toolCall, completed: true } }
+          msg.id === assistantMessageId && msg.toolCalls
+            ? {
+                ...msg,
+                toolCalls: msg.toolCalls.map(tc => ({ ...tc, completed: true })),
+              }
             : msg,
         ),
       )
@@ -391,11 +398,11 @@ export default function ChatScreen() {
     try {
       const history = LLM.getHistory()
       setMessages(prev => {
-        const toolCallMap = new Map<number, ToolCallStatus>()
+        const toolCallsMap = new Map<number, ToolCallsStatus>()
         if (preserveToolCalls) {
           prev.forEach((msg, idx) => {
-            if (msg.toolCall) {
-              toolCallMap.set(idx, msg.toolCall)
+            if (msg.toolCalls) {
+              toolCallsMap.set(idx, msg.toolCalls)
             }
           })
         }
@@ -416,7 +423,7 @@ export default function ChatScreen() {
             content,
             thinking,
             isUser: false,
-            toolCall: toolCallMap.get(index),
+            toolCalls: toolCallsMap.get(index),
           }
         })
       })
