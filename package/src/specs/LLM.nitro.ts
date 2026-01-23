@@ -4,15 +4,79 @@ import type { AnyMap, HybridObject } from 'react-native-nitro-modules'
  * Statistics from the last text generation.
  */
 export interface GenerationStats {
-  /** Total number of tokens generated */
   tokenCount: number
-  /** Generation speed in tokens per second */
   tokensPerSecond: number
-  /** Time in milliseconds until the first token was generated */
   timeToFirstToken: number
-  /** Total generation time in milliseconds */
   totalTime: number
 }
+
+export interface GenerationStartEvent {
+  type: 'generation_start'
+  timestamp: number
+}
+
+export interface TokenEvent {
+  type: 'token'
+  token: string
+}
+
+export interface ThinkingStartEvent {
+  type: 'thinking_start'
+  timestamp: number
+}
+
+export interface ThinkingChunkEvent {
+  type: 'thinking_chunk'
+  chunk: string
+}
+
+export interface ThinkingEndEvent {
+  type: 'thinking_end'
+  content: string
+  timestamp: number
+}
+
+export interface ToolCallStartEvent {
+  type: 'tool_call_start'
+  id: string
+  name: string
+  arguments: string
+}
+
+export interface ToolCallExecutingEvent {
+  type: 'tool_call_executing'
+  id: string
+}
+
+export interface ToolCallCompletedEvent {
+  type: 'tool_call_completed'
+  id: string
+  result: string
+}
+
+export interface ToolCallFailedEvent {
+  type: 'tool_call_failed'
+  id: string
+  error: string
+}
+
+export interface GenerationEndEvent {
+  type: 'generation_end'
+  content: string
+  stats: GenerationStats
+}
+
+export type StreamEvent =
+  | GenerationStartEvent
+  | TokenEvent
+  | ThinkingStartEvent
+  | ThinkingChunkEvent
+  | ThinkingEndEvent
+  | ToolCallStartEvent
+  | ToolCallExecutingEvent
+  | ToolCallCompletedEvent
+  | ToolCallFailedEvent
+  | GenerationEndEvent
 
 export interface LLMMessage {
   role: string
@@ -83,6 +147,11 @@ export interface LLM extends HybridObject<{ ios: 'swift' }> {
     prompt: string,
     onToken: (token: string) => void,
     onToolCall?: (toolName: string, args: string) => void,
+  ): Promise<string>
+
+  streamWithEvents(
+    prompt: string,
+    onEvent: (eventJson: string) => void,
   ): Promise<string>
 
   /**
