@@ -13,7 +13,8 @@ class HybridLLM: HybridLLMSpec {
         tokenCount: 0,
         tokensPerSecond: 0,
         timeToFirstToken: 0,
-        totalTime: 0
+        totalTime: 0,
+        toolExecutionTime: 0
     )
     private var modelFactory: ModelFactory = LLMModelFactory.shared
     private var manageHistory: Bool = false
@@ -237,7 +238,8 @@ class HybridLLM: HybridLLMSpec {
                     tokenCount: Double(tokenCount),
                     tokensPerSecond: tokensPerSecond,
                     timeToFirstToken: timeToFirstToken,
-                    totalTime: totalTime
+                    totalTime: totalTime,
+                    toolExecutionTime: 0
                 )
 
                 log("Stream complete - \(tokenCount) tokens, \(String(format: "%.1f", tokensPerSecond)) tokens/s")
@@ -278,7 +280,10 @@ class HybridLLM: HybridLLMSpec {
             let task = Task<String, Error> {
                 let startTime = Date()
                 var firstTokenTime: Date?
-                var tokenCount = 0
+                var outputTokenCount = 0
+                var mlxTokenCount = 0
+                var mlxGenerationTime: Double = 0
+                var toolExecutionTime: Double = 0
                 let emitter = StreamEventEmitter(callback: onEvent)
 
                 emitter.emitGenerationStart()
@@ -293,26 +298,32 @@ class HybridLLM: HybridLLMSpec {
                         if firstTokenTime == nil {
                             firstTokenTime = Date()
                         }
-                        tokenCount += 1
-                    }
+                        outputTokenCount += 1
+                    },
+                    onGenerationInfo: { tokens, time in
+                        mlxTokenCount += tokens
+                        mlxGenerationTime += time
+                    },
+                    toolExecutionTime: &toolExecutionTime
                 )
 
                 let endTime = Date()
                 let totalTime = endTime.timeIntervalSince(startTime) * 1000
                 let timeToFirstToken = (firstTokenTime ?? endTime).timeIntervalSince(startTime) * 1000
-                let tokensPerSecond = totalTime > 0 ? Double(tokenCount) / (totalTime / 1000) : 0
+                let tokensPerSecond = mlxGenerationTime > 0 ? Double(mlxTokenCount) / (mlxGenerationTime / 1000) : 0
 
                 let stats = GenerationStats(
-                    tokenCount: Double(tokenCount),
+                    tokenCount: Double(mlxTokenCount),
                     tokensPerSecond: tokensPerSecond,
                     timeToFirstToken: timeToFirstToken,
-                    totalTime: totalTime
+                    totalTime: totalTime,
+                    toolExecutionTime: toolExecutionTime
                 )
 
                 self.lastStats = stats
                 emitter.emitGenerationEnd(content: result, stats: stats)
 
-                log("StreamWithEvents complete - \(tokenCount) tokens, \(String(format: "%.1f", tokensPerSecond)) tokens/s")
+                log("StreamWithEvents complete - \(mlxTokenCount) tokens, \(String(format: "%.1f", tokensPerSecond)) tokens/s (tool execution: \(String(format: "%.0f", toolExecutionTime))ms)")
                 return result
             }
 
@@ -340,7 +351,9 @@ class HybridLLM: HybridLLMSpec {
         toolResults: [String]?,
         depth: Int,
         emitter: StreamEventEmitter,
-        onTokenProcessed: @escaping () -> Void
+        onTokenProcessed: @escaping () -> Void,
+        onGenerationInfo: @escaping (Int, Double) -> Void,
+        toolExecutionTime: inout Double
     ) async throws -> String {
         if depth >= maxToolCallDepth {
             log("Max tool call depth reached (\(maxToolCallDepth))")
@@ -435,6 +448,8 @@ class HybridLLM: HybridLLMSpec {
 
             case .info(let info):
                 log("Generation info: \(info.generationTokenCount) tokens, \(String(format: "%.1f", info.tokensPerSecond)) tokens/s")
+                let generationTime = info.tokensPerSecond > 0 ? Double(info.generationTokenCount) / info.tokensPerSecond * 1000 : 0
+                onGenerationInfo(info.generationTokenCount, generationTime)
             }
         }
 
@@ -457,6 +472,7 @@ class HybridLLM: HybridLLMSpec {
         if !pendingToolCalls.isEmpty {
             log("Executing \(pendingToolCalls.count) tool call(s)")
 
+            let toolStartTime = Date()
             var allToolResults: [String] = []
 
             for (id, tool, argsDict, _) in pendingToolCalls {
@@ -480,6 +496,8 @@ class HybridLLM: HybridLLMSpec {
                 }
             }
 
+            toolExecutionTime += Date().timeIntervalSince(toolStartTime) * 1000
+
             if !output.isEmpty {
                 self.messageHistory.append(LLMMessage(role: "assistant", content: output))
             }
@@ -494,7 +512,9 @@ class HybridLLM: HybridLLMSpec {
                 toolResults: allToolResults,
                 depth: depth + 1,
                 emitter: emitter,
-                onTokenProcessed: onTokenProcessed
+                onTokenProcessed: onTokenProcessed,
+                onGenerationInfo: onGenerationInfo,
+                toolExecutionTime: &toolExecutionTime
             )
 
             return output + continuation

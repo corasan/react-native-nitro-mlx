@@ -169,7 +169,7 @@ export const LLM = {
 
   /**
    * Get statistics from the last generation.
-   * @returns Statistics including token count, tokens/sec, TTFT, and total time
+   * @returns Statistics including token count, tokens/sec (excluding tool execution), TTFT, total time, and tool execution time
    */
   getLastGenerationStats(): GenerationStats {
     return getInstance().getLastGenerationStats()

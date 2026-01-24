@@ -31,6 +31,7 @@ export default function SettingsModal() {
   const avgTtft = average(results, 'timeToFirstToken')
   const avgTokens = average(results, 'totalTokens')
   const avgTime = average(results, 'totalTime')
+  const avgToolTime = average(results, 'toolExecutionTime')
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
@@ -82,6 +83,14 @@ export default function SettingsModal() {
                 </Text>
                 <Text style={[styles.metricLabel, { color: textColor }]}>avg time</Text>
               </View>
+              {avgToolTime > 0 && (
+                <View style={styles.metric}>
+                  <Text style={[styles.metricValue, { color: '#FF9500' }]}>
+                    {(avgToolTime / 1000).toFixed(1)}s
+                  </Text>
+                  <Text style={[styles.metricLabel, { color: textColor }]}>tool execution</Text>
+                </View>
+              )}
             </View>
           )}
         </View>

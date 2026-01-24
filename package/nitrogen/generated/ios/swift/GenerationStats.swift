@@ -19,8 +19,8 @@ public extension GenerationStats {
   /**
    * Create a new instance of `GenerationStats`.
    */
-  init(tokenCount: Double, tokensPerSecond: Double, timeToFirstToken: Double, totalTime: Double) {
-    self.init(tokenCount, tokensPerSecond, timeToFirstToken, totalTime)
+  init(tokenCount: Double, tokensPerSecond: Double, timeToFirstToken: Double, totalTime: Double, toolExecutionTime: Double) {
+    self.init(tokenCount, tokensPerSecond, timeToFirstToken, totalTime, toolExecutionTime)
   }
 
   var tokenCount: Double {
@@ -64,6 +64,17 @@ public extension GenerationStats {
     @inline(__always)
     set {
       self.__totalTime = newValue
+    }
+  }
+  
+  var toolExecutionTime: Double {
+    @inline(__always)
+    get {
+      return self.__toolExecutionTime
+    }
+    @inline(__always)
+    set {
+      self.__toolExecutionTime = newValue
     }
   }
 }

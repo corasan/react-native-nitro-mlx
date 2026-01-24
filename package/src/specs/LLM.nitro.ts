@@ -8,6 +8,7 @@ export interface GenerationStats {
   tokensPerSecond: number
   timeToFirstToken: number
   totalTime: number
+  toolExecutionTime: number
 }
 
 export interface GenerationStartEvent {

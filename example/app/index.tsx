@@ -389,6 +389,7 @@ export default function ChatScreen() {
             timeToFirstToken: event.stats.timeToFirstToken,
             totalTokens: event.stats.tokenCount,
             totalTime: event.stats.totalTime,
+            toolExecutionTime: event.stats.toolExecutionTime,
             timestamp: new Date(),
           })
           break
