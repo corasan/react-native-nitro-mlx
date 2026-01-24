@@ -1,5 +1,12 @@
 import { NitroModules } from 'react-native-nitro-modules'
-import type { GenerationStats, LLMLoadOptions, LLM as LLMSpec } from './specs/LLM.nitro'
+import type {
+  GenerationStats,
+  LLMLoadOptions,
+  LLM as LLMSpec,
+  StreamEvent,
+} from './specs/LLM.nitro'
+
+export type EventCallback = (event: StreamEvent) => void
 
 let instance: LLMSpec | null = null
 
@@ -102,6 +109,45 @@ export const LLM = {
             allToolCalls: [...accumulatedToolCalls],
           })
         }
+      }
+    })
+  },
+
+  /**
+   * Stream with typed events for thinking blocks and tool calls.
+   * Provides granular lifecycle events for UI updates.
+   *
+   * @param prompt - The input text
+   * @param onEvent - Callback receiving typed StreamEvent objects
+   * @returns Promise resolving to final content string (thinking content stripped)
+   *
+   * @example
+   * ```ts
+   * await LLM.streamWithEvents(prompt, (event) => {
+   *   switch (event.type) {
+   *     case 'token':
+   *       appendToContent(event.token)
+   *       break
+   *     case 'thinking_start':
+   *       showThinkingIndicator()
+   *       break
+   *     case 'thinking_chunk':
+   *       appendToThinking(event.chunk)
+   *       break
+   *     case 'tool_call_start':
+   *       showToolCallCard(event.name, event.arguments)
+   *       break
+   *   }
+   * })
+   * ```
+   */
+  streamWithEvents(prompt: string, onEvent: EventCallback): Promise<string> {
+    return getInstance().streamWithEvents(prompt, (eventJson: string) => {
+      try {
+        const event = JSON.parse(eventJson) as StreamEvent
+        onEvent(event)
+      } catch {
+        // Silently ignore malformed events
       }
     })
   },
