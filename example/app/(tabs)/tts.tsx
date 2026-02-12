@@ -148,17 +148,12 @@ export default function TTSScreen() {
         />
 
         <View style={styles.voiceContainer}>
-          <Text style={[styles.voiceLabel, { color: textColor }]}>
-            Voice
-          </Text>
+          <Text style={[styles.voiceLabel, { color: textColor }]}>Voice</Text>
           <View style={styles.voiceList}>
-            {VOICES.map((v) => (
+            {VOICES.map(v => (
               <TouchableOpacity
                 key={v}
-                style={[
-                  styles.voiceChip,
-                  v === voice && styles.voiceChipSelected,
-                ]}
+                style={[styles.voiceChip, v === voice && styles.voiceChipSelected]}
                 onPress={() => setVoice(v)}
               >
                 <Text

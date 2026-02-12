@@ -5,7 +5,6 @@ export enum ModelFamily {
   Phi = 'Phi',
   SmolLM = 'SmolLM',
   OpenELM = 'OpenELM',
-  Soprano = 'Soprano',
   PocketTTS = 'PocketTTS',
 }
 
@@ -16,7 +15,6 @@ export enum ModelProvider {
   Microsoft = 'Microsoft',
   HuggingFace = 'HuggingFace',
   Apple = 'Apple',
-  Canuma = 'Canuma',
   Kyutai = 'Kyutai',
 }
 
@@ -79,10 +77,6 @@ export enum MLXModel {
   OpenELM_1_1B_8bit = 'mlx-community/OpenELM-1_1B-8bit',
   OpenELM_3B_4bit = 'mlx-community/OpenELM-3B-4bit',
   OpenELM_3B_8bit = 'mlx-community/OpenELM-3B-8bit',
-
-  // Soprano TTS (Canuma) - 80M
-  Soprano_1_1_80M_8bit = 'mlx-community/Soprano-1.1-80M-8bit',
-  Soprano_80M_8bit = 'mlx-community/Soprano-80M-8bit',
 
   // PocketTTS (Kyutai) - 44.6M
   PocketTTS = 'mlx-community/pocket-tts',
@@ -350,26 +344,6 @@ export const MLXModels: ModelInfo[] = [
     displayName: 'OpenELM 3B (8-bit)',
     downloadSize: 3100000000,
     type: 'llm',
-  },
-  {
-    id: MLXModel.Soprano_1_1_80M_8bit,
-    family: ModelFamily.Soprano,
-    provider: ModelProvider.Canuma,
-    parameters: '80M',
-    quantization: '8bit',
-    displayName: 'Soprano 1.1 80M TTS (8-bit)',
-    downloadSize: 103000000,
-    type: 'tts',
-  },
-  {
-    id: MLXModel.Soprano_80M_8bit,
-    family: ModelFamily.Soprano,
-    provider: ModelProvider.Canuma,
-    parameters: '80M',
-    quantization: '8bit',
-    displayName: 'Soprano 80M TTS (8-bit)',
-    downloadSize: 103000000,
-    type: 'tts',
   },
   {
     id: MLXModel.PocketTTS,
