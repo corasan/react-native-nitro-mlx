@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
-import { createTool, LLM, MLXModel, ModelManager } from 'react-native-nitro-mlx'
+import { createTool, LLM, MLXModel, ModelManager, type StreamEvent } from 'react-native-nitro-mlx'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { z } from 'zod'
 import { useBenchmark } from '../components/benchmark-context'
@@ -60,13 +60,20 @@ const weatherTool = createTool({
   },
 })
 
-type ToolCallStatus = {
+type ThinkingBlockData = {
+  type: 'thinking'
+  content: string
+}
+
+type ToolCallBlockData = {
+  type: 'tool_call'
+  id?: string
   name: string
   args: Record<string, unknown>
   completed?: boolean
 }
 
-type ToolCallsStatus = ToolCallStatus[]
+type MessageBlock = ThinkingBlockData | ToolCallBlockData
 
 function parseThinkingBlocks(text: string): { thinking: string; content: string } {
   const thinkRegex = /<think>([\s\S]*?)<\/think>/g
@@ -90,13 +97,13 @@ function parseThinkingBlocks(text: string): { thinking: string; content: string 
 type Message = {
   id: string
   content: string
-  thinking?: string
-  isThinking?: boolean
+  blocks?: MessageBlock[]
+  currentThinking?: string
+  isCurrentlyThinking?: boolean
   isUser: boolean
-  toolCalls?: ToolCallsStatus
 }
 
-const ToolCallBlock = ({ toolCall }: { toolCall: ToolCallStatus }) => {
+const ToolCallBlock = ({ toolCall }: { toolCall: ToolCallBlockData }) => {
   const [expanded, setExpanded] = useState(false)
   const colorScheme = useColorScheme()
 
@@ -140,7 +147,7 @@ const ToolCallBlock = ({ toolCall }: { toolCall: ToolCallStatus }) => {
   )
 }
 
-const ThinkingBlock = ({ thinking }: { thinking: string }) => {
+const ThinkingBlock = ({ thinking, isStreaming }: { thinking: string; isStreaming?: boolean }) => {
   const [expanded, setExpanded] = useState(false)
   const colorScheme = useColorScheme()
   const textColor = colorScheme === 'dark' ? '#aaa' : '#666'
@@ -156,6 +163,7 @@ const ThinkingBlock = ({ thinking }: { thinking: string }) => {
         <Text style={[styles.thinkingLabel, { color: textColor }]}>
           {expanded ? '▼' : '▶'} Thinking
         </Text>
+        {isStreaming && <ActivityIndicator size="small" color="#888" style={{ marginLeft: 8 }} />}
       </View>
       {expanded && (
         <Text style={[styles.thinkingText, { color: textColor }]}>{thinking}</Text>
@@ -164,7 +172,7 @@ const ThinkingBlock = ({ thinking }: { thinking: string }) => {
   )
 }
 
-const MessageItem = ({ content, thinking, isThinking, isUser, toolCalls }: Message) => {
+const MessageItem = ({ content, blocks, currentThinking, isCurrentlyThinking, isUser }: Message) => {
   const colorScheme = useColorScheme()
   const textColor = colorScheme === 'dark' ? 'white' : 'black'
 
@@ -178,20 +186,18 @@ const MessageItem = ({ content, thinking, isThinking, isUser, toolCalls }: Messa
 
   return (
     <View style={styles.message}>
-      {isThinking && !content && (!toolCalls || toolCalls.length === 0) && (
-        <View style={styles.thinkingIndicator}>
-          <ActivityIndicator size="small" color="#888" />
-          <Text style={[styles.thinkingIndicatorText, { color: textColor }]}>
-            Thinking...
-          </Text>
-        </View>
+      {blocks?.map((block, index) =>
+        block.type === 'thinking' ? (
+          <ThinkingBlock key={`block-${index}`} thinking={block.content} />
+        ) : (
+          <ToolCallBlock key={`block-${index}`} toolCall={block} />
+        ),
       )}
-      {thinking && <ThinkingBlock thinking={thinking} />}
-      {toolCalls?.map((toolCall, index) => (
-        <ToolCallBlock key={`${toolCall.name}-${index}`} toolCall={toolCall} />
-      ))}
-      {content ? (
-        <Text style={[styles.messageText, { color: textColor }]}>{content}</Text>
+      {isCurrentlyThinking && (
+        <ThinkingBlock thinking={currentThinking || 'Processing...'} isStreaming />
+      )}
+      {content?.trim() ? (
+        <Text style={[styles.messageText, { color: textColor }]}>{content.trim()}</Text>
       ) : null}
     </View>
   )
@@ -279,8 +285,7 @@ export default function ChatScreen() {
     const tempAssistantMessage: Message = {
       id: assistantMessageId,
       content: '',
-      thinking: '',
-      isThinking: false,
+      blocks: [],
       isUser: false,
     }
 
@@ -293,81 +298,106 @@ export default function ChatScreen() {
     inputRef.current?.blur()
     setIsGenerating(true)
 
-    let fullText = ''
-    let accumulatedThinking = ''
+    let content = ''
+    let currentThinking = ''
 
-    try {
-      await LLM.stream(
-        currentPrompt,
-        token => {
-          if (token === '\u200B') {
-            const { thinking } = parseThinkingBlocks(fullText)
-            if (thinking) {
-              accumulatedThinking = thinking
-            }
-            fullText = ''
-            return
-          }
-
-          fullText += token
-
-          const hasUnclosedThink =
-            fullText.includes('<think>') &&
-            fullText.split('<think>').length > fullText.split('</think>').length
-
-          const { thinking, content: parsedContent } = parseThinkingBlocks(fullText)
-          const content = hasUnclosedThink
-            ? parsedContent.replace(/<think>[\s\S]*$/, '').trim()
-            : parsedContent
-          const combinedThinking = accumulatedThinking
-            ? `${accumulatedThinking}\n\n${thinking}`.trim()
-            : thinking
-
+    const handleEvent = (event: StreamEvent) => {
+      switch (event.type) {
+        case 'thinking_start':
+          currentThinking = ''
           setMessages(prev =>
             prev.map(msg =>
               msg.id === assistantMessageId
-                ? {
-                    ...msg,
-                    thinking: combinedThinking || msg.thinking,
-                    content,
-                    isThinking: hasUnclosedThink,
-                  }
+                ? { ...msg, currentThinking: '', isCurrentlyThinking: true }
                 : msg,
             ),
           )
-        },
-        ({ allToolCalls }) => {
-          const toolCalls = allToolCalls.map(tc => ({
-            name: tc.name,
-            args: tc.arguments,
-          }))
+          break
+
+        case 'thinking_chunk':
+          currentThinking += event.chunk
           setMessages(prev =>
             prev.map(msg =>
-              msg.id === assistantMessageId ? { ...msg, toolCalls } : msg,
+              msg.id === assistantMessageId ? { ...msg, currentThinking } : msg,
             ),
           )
-        },
-      )
+          break
 
-      setMessages(prev =>
-        prev.map(msg =>
-          msg.id === assistantMessageId && msg.toolCalls
-            ? {
+        case 'thinking_end':
+          setMessages(prev =>
+            prev.map(msg => {
+              if (msg.id !== assistantMessageId) return msg
+              const thinkingBlock: ThinkingBlockData = { type: 'thinking', content: event.content }
+              return {
                 ...msg,
-                toolCalls: msg.toolCalls.map(tc => ({ ...tc, completed: true })),
+                blocks: [...(msg.blocks || []), thinkingBlock],
+                currentThinking: undefined,
+                isCurrentlyThinking: false,
               }
-            : msg,
-        ),
-      )
+            }),
+          )
+          break
 
-      const stats = LLM.getLastGenerationStats()
-      addResult({
-        tokensPerSecond: stats.tokensPerSecond,
-        timeToFirstToken: stats.timeToFirstToken,
-        totalTokens: stats.tokenCount,
-        totalTime: stats.totalTime,
-        timestamp: new Date(),
-      })
+        case 'token':
+          content += event.token
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === assistantMessageId ? { ...msg, content } : msg,
+            ),
+          )
+          break
+
+        case 'tool_call_start':
+          setMessages(prev =>
+            prev.map(msg => {
+              if (msg.id !== assistantMessageId) return msg
+              const toolBlock: ToolCallBlockData = {
+                type: 'tool_call',
+                id: event.id,
+                name: event.name,
+                args: JSON.parse(event.arguments),
+                completed: false,
+              }
+              return {
+                ...msg,
+                blocks: [...(msg.blocks || []), toolBlock],
+              }
+            }),
+          )
+          break
+
+        case 'tool_call_completed':
+        case 'tool_call_failed':
+          setMessages(prev =>
+            prev.map(msg => {
+              if (msg.id !== assistantMessageId || !msg.blocks) return msg
+              return {
+                ...msg,
+                blocks: msg.blocks.map(block =>
+                  block.type === 'tool_call' && block.id === event.id
+                    ? { ...block, completed: true }
+                    : block,
+                ),
+              }
+            }),
+          )
+          break
+
+        case 'generation_end':
+          addResult({
+            tokensPerSecond: event.stats.tokensPerSecond,
+            timeToFirstToken: event.stats.timeToFirstToken,
+            totalTokens: event.stats.tokenCount,
+            totalTime: event.stats.totalTime,
+            toolExecutionTime: event.stats.toolExecutionTime,
+            timestamp: new Date(),
+          })
+          break
+      }
+    }
+
+    try {
+      await LLM.streamWithEvents(currentPrompt, handleEvent)
     } catch (error) {
       console.error('Error generating:', error)
     } finally {
@@ -396,11 +426,11 @@ export default function ChatScreen() {
     try {
       const history = LLM.getHistory()
       setMessages(prev => {
-        const toolCallsMap = new Map<number, ToolCallsStatus>()
+        const blocksMap = new Map<number, MessageBlock[]>()
         if (preserveToolCalls) {
           prev.forEach((msg, idx) => {
-            if (msg.toolCalls) {
-              toolCallsMap.set(idx, msg.toolCalls)
+            if (msg.blocks) {
+              blocksMap.set(idx, msg.blocks)
             }
           })
         }
@@ -415,13 +445,14 @@ export default function ChatScreen() {
           }
 
           const { thinking, content } = parseThinkingBlocks(msg.content)
+          const existingBlocks = blocksMap.get(index)
+          const blocks: MessageBlock[] = existingBlocks || (thinking ? [{ type: 'thinking', content: thinking }] : [])
 
           return {
             id: `history-${index}`,
             content,
-            thinking,
+            blocks,
             isUser: false,
-            toolCalls: toolCallsMap.get(index),
           }
         })
       })

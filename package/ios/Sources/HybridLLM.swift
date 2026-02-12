@@ -8,12 +8,13 @@ internal import Tokenizers
 class HybridLLM: HybridLLMSpec {
     private var session: ChatSession?
     private var currentTask: Task<String, Error>?
-    private var container: Any?
+    private var container: ModelContainer?
     private var lastStats: GenerationStats = GenerationStats(
         tokenCount: 0,
         tokensPerSecond: 0,
         timeToFirstToken: 0,
-        totalTime: 0
+        totalTime: 0,
+        toolExecutionTime: 0
     )
     private var modelFactory: ModelFactory = LLMModelFactory.shared
     private var manageHistory: Bool = false
@@ -175,20 +176,15 @@ class HybridLLM: HybridLLMSpec {
             }
 
             self.currentTask = task
+            defer { self.currentTask = nil }
 
-            do {
-                let result = try await task.value
-                self.currentTask = nil
+            let result = try await task.value
 
-                if self.manageHistory {
-                    self.messageHistory.append(LLMMessage(role: "assistant", content: result))
-                }
-
-                return result
-            } catch {
-                self.currentTask = nil
-                throw error
+            if self.manageHistory {
+                self.messageHistory.append(LLMMessage(role: "assistant", content: result))
             }
+
+            return result
         }
     }
 
@@ -199,7 +195,7 @@ class HybridLLM: HybridLLMSpec {
         onToken: @escaping (String) -> Void,
         onToolCall: ((String, String) -> Void)?
     ) throws -> Promise<String> {
-        guard let container = container as? ModelContainer else {
+        guard let container else {
             throw LLMError.notLoaded
         }
 
@@ -237,7 +233,8 @@ class HybridLLM: HybridLLMSpec {
                     tokenCount: Double(tokenCount),
                     tokensPerSecond: tokensPerSecond,
                     timeToFirstToken: timeToFirstToken,
-                    totalTime: totalTime
+                    totalTime: totalTime,
+                    toolExecutionTime: 0
                 )
 
                 log("Stream complete - \(tokenCount) tokens, \(String(format: "%.1f", tokensPerSecond)) tokens/s")
@@ -245,39 +242,99 @@ class HybridLLM: HybridLLMSpec {
             }
 
             self.currentTask = task
+            defer { self.currentTask = nil }
 
-            do {
-                let result = try await task.value
-                self.currentTask = nil
+            let result = try await task.value
 
-                if self.manageHistory {
-                    self.messageHistory.append(LLMMessage(role: "assistant", content: result))
-                }
-
-                return result
-            } catch {
-                self.currentTask = nil
-                throw error
+            if self.manageHistory {
+                self.messageHistory.append(LLMMessage(role: "assistant", content: result))
             }
+
+            return result
         }
     }
 
-    private func performGeneration(
-        container: ModelContainer,
+    func streamWithEvents(
         prompt: String,
-        toolResults: [String]?,
-        depth: Int,
-        onToken: @escaping (String) -> Void,
-        onToolCall: @escaping (String, String) -> Void
-    ) async throws -> String {
-        if depth >= maxToolCallDepth {
-            log("Max tool call depth reached (\(maxToolCallDepth))")
-            return ""
+        onEvent: @escaping (String) -> Void
+    ) throws -> Promise<String> {
+        guard let container else {
+            throw LLMError.notLoaded
         }
 
-        var output = ""
-        var pendingToolCalls: [(tool: ToolDefinition, args: [String: Any], argsJson: String)] = []
+        return Promise.async { [self] in
+            if self.manageHistory {
+                self.messageHistory.append(LLMMessage(role: "user", content: prompt))
+            }
 
+            let task = Task<String, Error> {
+                let startTime = Date()
+                var firstTokenTime: Date?
+                var outputTokenCount = 0
+                var mlxTokenCount = 0
+                var mlxGenerationTime: Double = 0
+                var toolExecutionTime: Double = 0
+                let emitter = StreamEventEmitter(callback: onEvent)
+
+                emitter.emitGenerationStart()
+
+                let result = try await self.performGenerationWithEvents(
+                    container: container,
+                    prompt: prompt,
+                    toolResults: nil,
+                    depth: 0,
+                    emitter: emitter,
+                    onTokenProcessed: {
+                        if firstTokenTime == nil {
+                            firstTokenTime = Date()
+                        }
+                        outputTokenCount += 1
+                    },
+                    onGenerationInfo: { tokens, time in
+                        mlxTokenCount += tokens
+                        mlxGenerationTime += time
+                    },
+                    toolExecutionTime: &toolExecutionTime
+                )
+
+                let endTime = Date()
+                let totalTime = endTime.timeIntervalSince(startTime) * 1000
+                let timeToFirstToken = (firstTokenTime ?? endTime).timeIntervalSince(startTime) * 1000
+                let tokensPerSecond = mlxGenerationTime > 0 ? Double(mlxTokenCount) / (mlxGenerationTime / 1000) : 0
+
+                let stats = GenerationStats(
+                    tokenCount: Double(mlxTokenCount),
+                    tokensPerSecond: tokensPerSecond,
+                    timeToFirstToken: timeToFirstToken,
+                    totalTime: totalTime,
+                    toolExecutionTime: toolExecutionTime
+                )
+
+                self.lastStats = stats
+                emitter.emitGenerationEnd(content: result, stats: stats)
+
+                log("StreamWithEvents complete - \(mlxTokenCount) tokens, \(String(format: "%.1f", tokensPerSecond)) tokens/s (tool execution: \(String(format: "%.0f", toolExecutionTime))ms)")
+                return result
+            }
+
+            self.currentTask = task
+            defer { self.currentTask = nil }
+
+            let result = try await task.value
+
+            if self.manageHistory {
+                self.messageHistory.append(LLMMessage(role: "assistant", content: result))
+            }
+
+            return result
+        }
+    }
+
+    private func buildChatMessages(
+        prompt: String,
+        toolResults: [String]?,
+        depth: Int
+    ) -> [Chat.Message] {
         var chat: [Chat.Message] = []
 
         if !self.systemPrompt.isEmpty {
@@ -298,12 +355,191 @@ class HybridLLM: HybridLLMSpec {
             chat.append(.user(prompt))
         }
 
-        if let toolResults = toolResults {
+        if let toolResults {
             for result in toolResults {
                 chat.append(.tool(result))
             }
         }
 
+        return chat
+    }
+
+    private func executeToolCall(
+        tool: ToolDefinition,
+        argsDict: [String: Any]
+    ) async throws -> String {
+        let argsAnyMap = self.dictionaryToAnyMap(argsDict)
+        let outerPromise = tool.handler(argsAnyMap)
+        let innerPromise = try await outerPromise.await()
+        let resultAnyMap = try await innerPromise.await()
+        let resultDict = self.anyMapToDictionary(resultAnyMap)
+        return dictionaryToJson(resultDict)
+    }
+
+    private func performGenerationWithEvents(
+        container: ModelContainer,
+        prompt: String,
+        toolResults: [String]?,
+        depth: Int,
+        emitter: StreamEventEmitter,
+        onTokenProcessed: @escaping () -> Void,
+        onGenerationInfo: @escaping (Int, Double) -> Void,
+        toolExecutionTime: inout Double
+    ) async throws -> String {
+        if depth >= maxToolCallDepth {
+            log("Max tool call depth reached (\(maxToolCallDepth))")
+            return ""
+        }
+
+        var output = ""
+        var thinkingMachine = ThinkingStateMachine()
+        var pendingToolCalls: [(id: String, tool: ToolDefinition, args: [String: Any], argsJson: String)] = []
+
+        let chat = buildChatMessages(prompt: prompt, toolResults: toolResults, depth: depth)
+        let userInput = UserInput(
+            chat: chat,
+            tools: !self.toolSchemas.isEmpty ? self.toolSchemas : nil
+        )
+
+        let lmInput = try await container.prepare(input: userInput)
+
+        let stream = try await container.perform { context in
+            let parameters = GenerateParameters(maxTokens: 2048, temperature: 0.7)
+            return try MLXLMCommon.generate(
+                input: lmInput,
+                parameters: parameters,
+                context: context
+            )
+        }
+
+        for await generation in stream {
+            if Task.isCancelled { break }
+
+            switch generation {
+            case .chunk(let text):
+                let outputs = thinkingMachine.process(token: text)
+
+                for machineOutput in outputs {
+                    switch machineOutput {
+                    case .token(let token):
+                        output += token
+                        emitter.emitToken(token)
+                        onTokenProcessed()
+
+                    case .thinkingStart:
+                        emitter.emitThinkingStart()
+
+                    case .thinkingChunk(let chunk):
+                        emitter.emitThinkingChunk(chunk)
+
+                    case .thinkingEnd(let content):
+                        emitter.emitThinkingEnd(content)
+                    }
+                }
+
+            case .toolCall(let toolCall):
+                log("Tool call detected: \(toolCall.function.name)")
+
+                guard let tool = self.tools.first(where: { $0.name == toolCall.function.name }) else {
+                    log("Unknown tool: \(toolCall.function.name)")
+                    continue
+                }
+
+                let toolCallId = UUID().uuidString
+                let argsDict = self.convertToolCallArguments(toolCall.function.arguments)
+                let argsJson = dictionaryToJson(argsDict)
+
+                emitter.emitToolCallStart(id: toolCallId, name: toolCall.function.name, arguments: argsJson)
+                pendingToolCalls.append((id: toolCallId, tool: tool, args: argsDict, argsJson: argsJson))
+
+            case .info(let info):
+                log("Generation info: \(info.generationTokenCount) tokens, \(String(format: "%.1f", info.tokensPerSecond)) tokens/s")
+                let generationTime = info.tokensPerSecond > 0 ? Double(info.generationTokenCount) / info.tokensPerSecond * 1000 : 0
+                onGenerationInfo(info.generationTokenCount, generationTime)
+            }
+        }
+
+        let flushOutputs = thinkingMachine.flush()
+        for machineOutput in flushOutputs {
+            switch machineOutput {
+            case .token(let token):
+                output += token
+                emitter.emitToken(token)
+                onTokenProcessed()
+            case .thinkingStart:
+                emitter.emitThinkingStart()
+            case .thinkingChunk(let chunk):
+                emitter.emitThinkingChunk(chunk)
+            case .thinkingEnd(let content):
+                emitter.emitThinkingEnd(content)
+            }
+        }
+
+        if !pendingToolCalls.isEmpty {
+            log("Executing \(pendingToolCalls.count) tool call(s)")
+
+            let toolStartTime = Date()
+            var allToolResults: [String] = []
+
+            for (id, tool, argsDict, _) in pendingToolCalls {
+                emitter.emitToolCallExecuting(id: id)
+
+                do {
+                    let resultJson = try await executeToolCall(tool: tool, argsDict: argsDict)
+                    log("Tool result for \(tool.name): \(resultJson.prefix(100))...")
+                    emitter.emitToolCallCompleted(id: id, result: resultJson)
+                    allToolResults.append(resultJson)
+                } catch {
+                    log("Tool execution error for \(tool.name): \(error)")
+                    emitter.emitToolCallFailed(id: id, error: error.localizedDescription)
+                    allToolResults.append("{\"error\": \"Tool execution failed\"}")
+                }
+            }
+
+            toolExecutionTime += Date().timeIntervalSince(toolStartTime) * 1000
+
+            if !output.isEmpty {
+                self.messageHistory.append(LLMMessage(role: "assistant", content: output))
+            }
+
+            for result in allToolResults {
+                self.messageHistory.append(LLMMessage(role: "tool", content: result))
+            }
+
+            let continuation = try await self.performGenerationWithEvents(
+                container: container,
+                prompt: prompt,
+                toolResults: allToolResults,
+                depth: depth + 1,
+                emitter: emitter,
+                onTokenProcessed: onTokenProcessed,
+                onGenerationInfo: onGenerationInfo,
+                toolExecutionTime: &toolExecutionTime
+            )
+
+            return output + continuation
+        }
+
+        return output
+    }
+
+    private func performGeneration(
+        container: ModelContainer,
+        prompt: String,
+        toolResults: [String]?,
+        depth: Int,
+        onToken: @escaping (String) -> Void,
+        onToolCall: @escaping (String, String) -> Void
+    ) async throws -> String {
+        if depth >= maxToolCallDepth {
+            log("Max tool call depth reached (\(maxToolCallDepth))")
+            return ""
+        }
+
+        var output = ""
+        var pendingToolCalls: [(tool: ToolDefinition, args: [String: Any], argsJson: String)] = []
+
+        let chat = buildChatMessages(prompt: prompt, toolResults: toolResults, depth: depth)
         let userInput = UserInput(
             chat: chat,
             tools: !self.toolSchemas.isEmpty ? self.toolSchemas : nil
@@ -337,7 +573,7 @@ class HybridLLM: HybridLLMSpec {
                 }
 
                 let argsDict = self.convertToolCallArguments(toolCall.function.arguments)
-                let argsJson = self.dictionaryToJson(argsDict)
+                let argsJson = dictionaryToJson(argsDict)
 
                 pendingToolCalls.append((tool: tool, args: argsDict, argsJson: argsJson))
                 onToolCall(toolCall.function.name, argsJson)
@@ -354,13 +590,7 @@ class HybridLLM: HybridLLMSpec {
 
             for (tool, argsDict, _) in pendingToolCalls {
                 do {
-                    let argsAnyMap = self.dictionaryToAnyMap(argsDict)
-                    let outerPromise = tool.handler(argsAnyMap)
-                    let innerPromise = try await outerPromise.await()
-                    let resultAnyMap = try await innerPromise.await()
-                    let resultDict = self.anyMapToDictionary(resultAnyMap)
-                    let resultJson = self.dictionaryToJson(resultDict)
-
+                    let resultJson = try await executeToolCall(tool: tool, argsDict: argsDict)
                     log("Tool result for \(tool.name): \(resultJson.prefix(100))...")
                     allToolResults.append(resultJson)
                 } catch {
@@ -404,14 +634,6 @@ class HybridLLM: HybridLLMSpec {
             result[key] = value.anyValue
         }
         return result
-    }
-
-    private func dictionaryToJson(_ dict: [String: Any]) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: dict),
-              let json = String(data: data, encoding: .utf8) else {
-            return "{}"
-        }
-        return json
     }
 
     private func dictionaryToAnyMap(_ dict: [String: Any]) -> AnyMap {

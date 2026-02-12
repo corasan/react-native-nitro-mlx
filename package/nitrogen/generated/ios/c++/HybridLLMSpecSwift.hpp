@@ -125,6 +125,14 @@ namespace margelo::nitro::mlxreactnative {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<std::string>> streamWithEvents(const std::string& prompt, const std::function<void(const std::string& /* eventJson */)>& onEvent) override {
+      auto __result = _swiftPart.streamWithEvents(prompt, onEvent);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline void stop() override {
       auto __result = _swiftPart.stop();
       if (__result.hasError()) [[unlikely]] {

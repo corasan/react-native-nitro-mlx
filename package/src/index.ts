@@ -1,4 +1,10 @@
-export { LLM, type Message, type ToolCallInfo, type ToolCallUpdate } from './llm'
+export {
+  LLM,
+  type EventCallback,
+  type Message,
+  type ToolCallInfo,
+  type ToolCallUpdate,
+} from './llm'
 export { ModelManager } from './modelManager'
 export {
   MLXModel,
@@ -12,6 +18,17 @@ export type {
   GenerationStats,
   LLM as LLMSpec,
   LLMLoadOptions,
+  StreamEvent,
+  GenerationStartEvent,
+  TokenEvent,
+  ThinkingStartEvent,
+  ThinkingChunkEvent,
+  ThinkingEndEvent,
+  ToolCallStartEvent,
+  ToolCallExecutingEvent,
+  ToolCallCompletedEvent,
+  ToolCallFailedEvent,
+  GenerationEndEvent,
   ToolDefinition,
   ToolParameter,
   ToolParameterType,

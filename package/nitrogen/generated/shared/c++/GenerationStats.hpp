@@ -38,10 +38,11 @@ namespace margelo::nitro::mlxreactnative {
     double tokensPerSecond     SWIFT_PRIVATE;
     double timeToFirstToken     SWIFT_PRIVATE;
     double totalTime     SWIFT_PRIVATE;
+    double toolExecutionTime     SWIFT_PRIVATE;
 
   public:
     GenerationStats() = default;
-    explicit GenerationStats(double tokenCount, double tokensPerSecond, double timeToFirstToken, double totalTime): tokenCount(tokenCount), tokensPerSecond(tokensPerSecond), timeToFirstToken(timeToFirstToken), totalTime(totalTime) {}
+    explicit GenerationStats(double tokenCount, double tokensPerSecond, double timeToFirstToken, double totalTime, double toolExecutionTime): tokenCount(tokenCount), tokensPerSecond(tokensPerSecond), timeToFirstToken(timeToFirstToken), totalTime(totalTime), toolExecutionTime(toolExecutionTime) {}
   };
 
 } // namespace margelo::nitro::mlxreactnative
@@ -57,7 +58,8 @@ namespace margelo::nitro {
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, "tokenCount")),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, "tokensPerSecond")),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, "timeToFirstToken")),
-        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, "totalTime"))
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, "totalTime")),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, "toolExecutionTime"))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::mlxreactnative::GenerationStats& arg) {
@@ -66,6 +68,7 @@ namespace margelo::nitro {
       obj.setProperty(runtime, "tokensPerSecond", JSIConverter<double>::toJSI(runtime, arg.tokensPerSecond));
       obj.setProperty(runtime, "timeToFirstToken", JSIConverter<double>::toJSI(runtime, arg.timeToFirstToken));
       obj.setProperty(runtime, "totalTime", JSIConverter<double>::toJSI(runtime, arg.totalTime));
+      obj.setProperty(runtime, "toolExecutionTime", JSIConverter<double>::toJSI(runtime, arg.toolExecutionTime));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -80,6 +83,7 @@ namespace margelo::nitro {
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, "tokensPerSecond"))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, "timeToFirstToken"))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, "totalTime"))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, "toolExecutionTime"))) return false;
       return true;
     }
   };

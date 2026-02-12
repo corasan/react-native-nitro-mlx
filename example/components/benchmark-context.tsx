@@ -5,6 +5,7 @@ export type BenchmarkResult = {
   timeToFirstToken: number
   totalTokens: number
   totalTime: number
+  toolExecutionTime: number
   timestamp: Date
 }
 
