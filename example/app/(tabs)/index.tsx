@@ -17,7 +17,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { createTool, LLM, MLXModel, ModelManager, type StreamEvent } from 'react-native-nitro-mlx'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { z } from 'zod'
-import { useBenchmark } from '../components/benchmark-context'
+import { useBenchmark } from '../../components/benchmark-context'
 
 const MODEL_ID = MLXModel.Qwen3_1_7B_4bit
 

@@ -40,7 +40,8 @@
             "networkInspector": true
           }
         }
-      ]
+      ],
+      ["react-native-audio-api", { "iosBackgroundMode": "audio" }]
     ],
     "experiments": {
       "typedRoutes": true

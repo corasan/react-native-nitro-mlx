@@ -58,7 +58,7 @@ class HybridLLM: HybridLLMSpec {
     }
 
     private func getGPUMemoryUsage() -> String {
-        let snapshot = GPU.snapshot()
+        let snapshot = Memory.snapshot()
         let allocatedMB = Float(snapshot.activeMemory) / 1024.0 / 1024.0
         let cacheMB = Float(snapshot.cacheMemory) / 1024.0 / 1024.0
         let peakMB = Float(snapshot.peakMemory) / 1024.0 / 1024.0
@@ -99,7 +99,7 @@ class HybridLLM: HybridLLMSpec {
 
         return Promise.async { [self] in
             let task = Task { @MainActor in
-                MLX.GPU.set(cacheLimit: 2000000)
+                Memory.cacheLimit = 2000000
 
                 self.currentTask?.cancel()
                 self.currentTask = nil
@@ -107,7 +107,7 @@ class HybridLLM: HybridLLMSpec {
                 self.container = nil
                 self.tools = []
                 self.toolSchemas = []
-                MLX.GPU.clearCache()
+                Memory.clearCache()
 
                 let memoryAfterCleanup = self.getMemoryUsage()
                 let gpuAfterCleanup = self.getGPUMemoryUsage()
@@ -692,7 +692,7 @@ class HybridLLM: HybridLLMSpec {
         manageHistory = false
         modelId = ""
 
-        MLX.GPU.clearCache()
+        MLX.Memory.clearCache()
 
         let memoryAfter = getMemoryUsage()
         let gpuAfter = getGPUMemoryUsage()

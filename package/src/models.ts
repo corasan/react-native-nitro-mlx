@@ -5,6 +5,8 @@ export enum ModelFamily {
   Phi = 'Phi',
   SmolLM = 'SmolLM',
   OpenELM = 'OpenELM',
+  Soprano = 'Soprano',
+  PocketTTS = 'PocketTTS',
 }
 
 export enum ModelProvider {
@@ -14,9 +16,13 @@ export enum ModelProvider {
   Microsoft = 'Microsoft',
   HuggingFace = 'HuggingFace',
   Apple = 'Apple',
+  Canuma = 'Canuma',
+  Kyutai = 'Kyutai',
 }
 
-export type ModelQuantization = '4bit' | '8bit'
+export type ModelQuantization = '4bit' | '8bit' | 'bf16'
+
+export type ModelType = 'llm' | 'tts'
 
 export interface ModelInfo {
   id: MLXModel
@@ -26,6 +32,7 @@ export interface ModelInfo {
   quantization: ModelQuantization
   displayName: string
   downloadSize: number
+  type: ModelType
 }
 
 export enum MLXModel {
@@ -72,6 +79,15 @@ export enum MLXModel {
   OpenELM_1_1B_8bit = 'mlx-community/OpenELM-1_1B-8bit',
   OpenELM_3B_4bit = 'mlx-community/OpenELM-3B-4bit',
   OpenELM_3B_8bit = 'mlx-community/OpenELM-3B-8bit',
+
+  // Soprano TTS (Canuma) - 80M
+  Soprano_1_1_80M_8bit = 'mlx-community/Soprano-1.1-80M-8bit',
+  Soprano_80M_8bit = 'mlx-community/Soprano-80M-8bit',
+
+  // PocketTTS (Kyutai) - 44.6M
+  PocketTTS = 'mlx-community/pocket-tts',
+  PocketTTS_8bit = 'mlx-community/pocket-tts-8bit',
+  PocketTTS_4bit = 'mlx-community/pocket-tts-4bit',
 }
 
 export const MLXModels: ModelInfo[] = [
@@ -83,6 +99,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'Llama 3.2 1B Instruct (4-bit)',
     downloadSize: 1407777762,
+    type: 'llm',
   },
   {
     id: MLXModel.Llama_3_2_1B_Instruct_8bit,
@@ -92,6 +109,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'Llama 3.2 1B Instruct (8-bit)',
     downloadSize: 1313157436,
+    type: 'llm',
   },
   {
     id: MLXModel.Llama_3_2_3B_Instruct_4bit,
@@ -101,6 +119,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'Llama 3.2 3B Instruct (4-bit)',
     downloadSize: 2019397474,
+    type: 'llm',
   },
   {
     id: MLXModel.Llama_3_2_3B_Instruct_8bit,
@@ -110,6 +129,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'Llama 3.2 3B Instruct (8-bit)',
     downloadSize: 3413784042,
+    type: 'llm',
   },
   {
     id: MLXModel.Qwen2_5_0_5B_Instruct_4bit,
@@ -119,6 +139,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'Qwen 2.5 0.5B Instruct (4-bit)',
     downloadSize: 278064920,
+    type: 'llm',
   },
   {
     id: MLXModel.Qwen2_5_0_5B_Instruct_8bit,
@@ -128,6 +149,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'Qwen 2.5 0.5B Instruct (8-bit)',
     downloadSize: 525045902,
+    type: 'llm',
   },
   {
     id: MLXModel.Qwen2_5_1_5B_Instruct_4bit,
@@ -137,6 +159,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'Qwen 2.5 1.5B Instruct (4-bit)',
     downloadSize: 868628559,
+    type: 'llm',
   },
   {
     id: MLXModel.Qwen2_5_1_5B_Instruct_8bit,
@@ -146,6 +169,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'Qwen 2.5 1.5B Instruct (8-bit)',
     downloadSize: 1640414038,
+    type: 'llm',
   },
   {
     id: MLXModel.Qwen2_5_3B_Instruct_4bit,
@@ -155,6 +179,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'Qwen 2.5 3B Instruct (4-bit)',
     downloadSize: 1736293090,
+    type: 'llm',
   },
   {
     id: MLXModel.Qwen2_5_3B_Instruct_8bit,
@@ -164,6 +189,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'Qwen 2.5 3B Instruct (8-bit)',
     downloadSize: 3279142142,
+    type: 'llm',
   },
   {
     id: MLXModel.Qwen3_1_7B_4bit,
@@ -173,6 +199,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'Qwen 3 1.7B (4-bit)',
     downloadSize: 979502864,
+    type: 'llm',
   },
   {
     id: MLXModel.Qwen3_1_7B_8bit,
@@ -182,6 +209,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'Qwen 3 1.7B (8-bit)',
     downloadSize: 1839729195,
+    type: 'llm',
   },
   {
     id: MLXModel.Gemma_3_1B_IT_4bit,
@@ -191,6 +219,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'Gemma 3 1B IT (4-bit)',
     downloadSize: 770650946,
+    type: 'llm',
   },
   {
     id: MLXModel.Gemma_3_1B_IT_8bit,
@@ -200,6 +229,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'Gemma 3 1B IT (8-bit)',
     downloadSize: 1421522471,
+    type: 'llm',
   },
   {
     id: MLXModel.Phi_3_5_Mini_Instruct_4bit,
@@ -209,6 +239,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'Phi 3.5 Mini Instruct (4-bit)',
     downloadSize: 2150195856,
+    type: 'llm',
   },
   {
     id: MLXModel.Phi_3_5_Mini_Instruct_8bit,
@@ -218,6 +249,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'Phi 3.5 Mini Instruct (8-bit)',
     downloadSize: 4060636056,
+    type: 'llm',
   },
   {
     id: MLXModel.Phi_4_Mini_Instruct_4bit,
@@ -227,6 +259,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'Phi 4 Mini Instruct (4-bit)',
     downloadSize: 2173624891,
+    type: 'llm',
   },
   {
     id: MLXModel.Phi_4_Mini_Instruct_8bit,
@@ -236,6 +269,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'Phi 4 Mini Instruct (8-bit)',
     downloadSize: 4091536167,
+    type: 'llm',
   },
   {
     id: MLXModel.SmolLM_1_7B_Instruct_4bit,
@@ -245,6 +279,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'SmolLM 1.7B Instruct (4-bit)',
     downloadSize: 962855374,
+    type: 'llm',
   },
   {
     id: MLXModel.SmolLM_1_7B_Instruct_8bit,
@@ -254,6 +289,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'SmolLM 1.7B Instruct (8-bit)',
     downloadSize: 1818493993,
+    type: 'llm',
   },
   {
     id: MLXModel.SmolLM2_1_7B_Instruct_4bit,
@@ -263,6 +299,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'SmolLM2 1.7B Instruct (4-bit)',
     downloadSize: 980000000,
+    type: 'llm',
   },
   {
     id: MLXModel.SmolLM2_1_7B_Instruct_8bit,
@@ -272,6 +309,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'SmolLM2 1.7B Instruct (8-bit)',
     downloadSize: 1850000000,
+    type: 'llm',
   },
   {
     id: MLXModel.OpenELM_1_1B_4bit,
@@ -281,6 +319,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'OpenELM 1.1B (4-bit)',
     downloadSize: 608162655,
+    type: 'llm',
   },
   {
     id: MLXModel.OpenELM_1_1B_8bit,
@@ -290,6 +329,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'OpenELM 1.1B (8-bit)',
     downloadSize: 1148048397,
+    type: 'llm',
   },
   {
     id: MLXModel.OpenELM_3B_4bit,
@@ -299,6 +339,7 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'OpenELM 3B (4-bit)',
     downloadSize: 1650000000,
+    type: 'llm',
   },
   {
     id: MLXModel.OpenELM_3B_8bit,
@@ -308,5 +349,56 @@ export const MLXModels: ModelInfo[] = [
     quantization: '8bit',
     displayName: 'OpenELM 3B (8-bit)',
     downloadSize: 3100000000,
+    type: 'llm',
+  },
+  {
+    id: MLXModel.Soprano_1_1_80M_8bit,
+    family: ModelFamily.Soprano,
+    provider: ModelProvider.Canuma,
+    parameters: '80M',
+    quantization: '8bit',
+    displayName: 'Soprano 1.1 80M TTS (8-bit)',
+    downloadSize: 103000000,
+    type: 'tts',
+  },
+  {
+    id: MLXModel.Soprano_80M_8bit,
+    family: ModelFamily.Soprano,
+    provider: ModelProvider.Canuma,
+    parameters: '80M',
+    quantization: '8bit',
+    displayName: 'Soprano 80M TTS (8-bit)',
+    downloadSize: 103000000,
+    type: 'tts',
+  },
+  {
+    id: MLXModel.PocketTTS,
+    family: ModelFamily.PocketTTS,
+    provider: ModelProvider.Kyutai,
+    parameters: '44.6M',
+    quantization: 'bf16',
+    displayName: 'PocketTTS (bf16)',
+    downloadSize: 180000000,
+    type: 'tts',
+  },
+  {
+    id: MLXModel.PocketTTS_8bit,
+    family: ModelFamily.PocketTTS,
+    provider: ModelProvider.Kyutai,
+    parameters: '44.6M',
+    quantization: '8bit',
+    displayName: 'PocketTTS (8-bit)',
+    downloadSize: 140000000,
+    type: 'tts',
+  },
+  {
+    id: MLXModel.PocketTTS_4bit,
+    family: ModelFamily.PocketTTS,
+    provider: ModelProvider.Kyutai,
+    parameters: '44.6M',
+    quantization: '4bit',
+    displayName: 'PocketTTS (4-bit)',
+    downloadSize: 80000000,
+    type: 'tts',
   },
 ]

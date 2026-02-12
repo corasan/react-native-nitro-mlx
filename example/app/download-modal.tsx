@@ -1,11 +1,13 @@
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, useColorScheme, View } from 'react-native'
 import { MLXModel, ModelManager } from 'react-native-nitro-mlx'
 
-const MODEL_ID = MLXModel.Qwen3_1_7B_4bit
+const DEFAULT_MODEL_ID = MLXModel.Qwen3_1_7B_4bit
 
 export default function DownloadModal() {
+  const { modelId } = useLocalSearchParams<{ modelId?: string }>()
+  const MODEL_ID = (modelId as MLXModel) || DEFAULT_MODEL_ID
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState('Starting download...')
   const colorScheme = useColorScheme()

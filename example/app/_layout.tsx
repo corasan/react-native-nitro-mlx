@@ -7,7 +7,7 @@ import { BenchmarkProvider } from '../components/benchmark-context'
 export { ErrorBoundary } from 'expo-router'
 
 export const unstable_settings = {
-  initialRouteName: 'index',
+  initialRouteName: '(tabs)',
 }
 
 export default function RootLayout() {
@@ -15,7 +15,10 @@ export default function RootLayout() {
     <BenchmarkProvider>
       <KeyboardProvider>
         <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="(tabs)"
+            options={{ headerShown: false }}
+          />
           <Stack.Screen
             name="download-modal"
             options={{

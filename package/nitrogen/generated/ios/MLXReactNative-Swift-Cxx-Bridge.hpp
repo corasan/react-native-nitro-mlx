@@ -8,16 +8,24 @@
 #pragma once
 
 // Forward declarations of C++ defined types
+// Forward declaration of `ArrayBufferHolder` to properly resolve imports.
+namespace NitroModules { class ArrayBufferHolder; }
 // Forward declaration of `GenerationStats` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct GenerationStats; }
 // Forward declaration of `HybridLLMSpec` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { class HybridLLMSpec; }
 // Forward declaration of `HybridModelManagerSpec` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { class HybridModelManagerSpec; }
+// Forward declaration of `HybridTTSSpec` to properly resolve imports.
+namespace margelo::nitro::mlxreactnative { class HybridTTSSpec; }
 // Forward declaration of `LLMLoadOptions` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct LLMLoadOptions; }
 // Forward declaration of `LLMMessage` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct LLMMessage; }
+// Forward declaration of `TTSGenerateOptions` to properly resolve imports.
+namespace margelo::nitro::mlxreactnative { struct TTSGenerateOptions; }
+// Forward declaration of `TTSLoadOptions` to properly resolve imports.
+namespace margelo::nitro::mlxreactnative { struct TTSLoadOptions; }
 // Forward declaration of `ToolDefinition` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct ToolDefinition; }
 // Forward declaration of `ToolParameter` to properly resolve imports.
@@ -28,16 +36,23 @@ namespace margelo::nitro::mlxreactnative { struct ToolParameter; }
 namespace MLXReactNative { class HybridLLMSpec_cxx; }
 // Forward declaration of `HybridModelManagerSpec_cxx` to properly resolve imports.
 namespace MLXReactNative { class HybridModelManagerSpec_cxx; }
+// Forward declaration of `HybridTTSSpec_cxx` to properly resolve imports.
+namespace MLXReactNative { class HybridTTSSpec_cxx; }
 
 // Include C++ defined types
 #include "GenerationStats.hpp"
 #include "HybridLLMSpec.hpp"
 #include "HybridModelManagerSpec.hpp"
+#include "HybridTTSSpec.hpp"
 #include "LLMLoadOptions.hpp"
 #include "LLMMessage.hpp"
+#include "TTSGenerateOptions.hpp"
+#include "TTSLoadOptions.hpp"
 #include "ToolDefinition.hpp"
 #include "ToolParameter.hpp"
 #include <NitroModules/AnyMap.hpp>
+#include <NitroModules/ArrayBuffer.hpp>
+#include <NitroModules/ArrayBufferHolder.hpp>
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/PromiseHolder.hpp>
 #include <NitroModules/Result.hpp>
@@ -566,6 +581,121 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
   }
   inline Result_std__shared_ptr_Promise_std__vector_std__string____ create_Result_std__shared_ptr_Promise_std__vector_std__string____(const std::exception_ptr& error) noexcept {
     return Result<std::shared_ptr<Promise<std::vector<std::string>>>>::withError(error);
+  }
+  
+  // pragma MARK: std::optional<TTSLoadOptions>
+  /**
+   * Specialized version of `std::optional<TTSLoadOptions>`.
+   */
+  using std__optional_TTSLoadOptions_ = std::optional<TTSLoadOptions>;
+  inline std::optional<TTSLoadOptions> create_std__optional_TTSLoadOptions_(const TTSLoadOptions& value) noexcept {
+    return std::optional<TTSLoadOptions>(value);
+  }
+  inline bool has_value_std__optional_TTSLoadOptions_(const std::optional<TTSLoadOptions>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline TTSLoadOptions get_std__optional_TTSLoadOptions_(const std::optional<TTSLoadOptions>& optional) noexcept {
+    return *optional;
+  }
+  
+  // pragma MARK: std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>
+  /**
+   * Specialized version of `std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>`.
+   */
+  using std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer___ = std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>;
+  inline std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> create_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer___() noexcept {
+    return Promise<std::shared_ptr<ArrayBuffer>>::create();
+  }
+  inline PromiseHolder<std::shared_ptr<ArrayBuffer>> wrap_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer___(std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> promise) noexcept {
+    return PromiseHolder<std::shared_ptr<ArrayBuffer>>(std::move(promise));
+  }
+  
+  // pragma MARK: std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>
+  /**
+   * Specialized version of `std::function<void(const std::shared_ptr<ArrayBuffer>&)>`.
+   */
+  using Func_void_std__shared_ptr_ArrayBuffer_ = std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>;
+  /**
+   * Wrapper class for a `std::function<void(const std::shared_ptr<ArrayBuffer>& / * result * /)>`, this can be used from Swift.
+   */
+  class Func_void_std__shared_ptr_ArrayBuffer__Wrapper final {
+  public:
+    explicit Func_void_std__shared_ptr_ArrayBuffer__Wrapper(std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>&& func): _function(std::make_unique<std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>>(std::move(func))) {}
+    inline void call(ArrayBufferHolder result) const noexcept {
+      _function->operator()(result.getArrayBuffer());
+    }
+  private:
+    std::unique_ptr<std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_std__shared_ptr_ArrayBuffer_ create_Func_void_std__shared_ptr_ArrayBuffer_(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_std__shared_ptr_ArrayBuffer__Wrapper wrap_Func_void_std__shared_ptr_ArrayBuffer_(Func_void_std__shared_ptr_ArrayBuffer_ value) noexcept {
+    return Func_void_std__shared_ptr_ArrayBuffer__Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::string>
+  /**
+   * Specialized version of `std::optional<std::string>`.
+   */
+  using std__optional_std__string_ = std::optional<std::string>;
+  inline std::optional<std::string> create_std__optional_std__string_(const std::string& value) noexcept {
+    return std::optional<std::string>(value);
+  }
+  inline bool has_value_std__optional_std__string_(const std::optional<std::string>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::string get_std__optional_std__string_(const std::optional<std::string>& optional) noexcept {
+    return *optional;
+  }
+  
+  // pragma MARK: std::optional<double>
+  /**
+   * Specialized version of `std::optional<double>`.
+   */
+  using std__optional_double_ = std::optional<double>;
+  inline std::optional<double> create_std__optional_double_(const double& value) noexcept {
+    return std::optional<double>(value);
+  }
+  inline bool has_value_std__optional_double_(const std::optional<double>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline double get_std__optional_double_(const std::optional<double>& optional) noexcept {
+    return *optional;
+  }
+  
+  // pragma MARK: std::optional<TTSGenerateOptions>
+  /**
+   * Specialized version of `std::optional<TTSGenerateOptions>`.
+   */
+  using std__optional_TTSGenerateOptions_ = std::optional<TTSGenerateOptions>;
+  inline std::optional<TTSGenerateOptions> create_std__optional_TTSGenerateOptions_(const TTSGenerateOptions& value) noexcept {
+    return std::optional<TTSGenerateOptions>(value);
+  }
+  inline bool has_value_std__optional_TTSGenerateOptions_(const std::optional<TTSGenerateOptions>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline TTSGenerateOptions get_std__optional_TTSGenerateOptions_(const std::optional<TTSGenerateOptions>& optional) noexcept {
+    return *optional;
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridTTSSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridTTSSpec>`.
+   */
+  using std__shared_ptr_HybridTTSSpec_ = std::shared_ptr<HybridTTSSpec>;
+  std::shared_ptr<HybridTTSSpec> create_std__shared_ptr_HybridTTSSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridTTSSpec_(std__shared_ptr_HybridTTSSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridTTSSpec>
+  using std__weak_ptr_HybridTTSSpec_ = std::weak_ptr<HybridTTSSpec>;
+  inline std__weak_ptr_HybridTTSSpec_ weakify_std__shared_ptr_HybridTTSSpec_(const std::shared_ptr<HybridTTSSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>
+  using Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____ = Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>;
+  inline Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____ create_Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____(const std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>& value) noexcept {
+    return Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>::withValue(value);
+  }
+  inline Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____ create_Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____(const std::exception_ptr& error) noexcept {
+    return Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>::withError(error);
   }
 
 } // namespace margelo::nitro::mlxreactnative::bridge::swift
