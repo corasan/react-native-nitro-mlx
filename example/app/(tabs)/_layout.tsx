@@ -1,16 +1,17 @@
-import { Tabs } from 'expo-router'
+import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs'
 
 export default function TabsLayout() {
   return (
-    <Tabs>
-      <Tabs.Screen
-        name="index"
-        options={{ title: 'Chat', headerShown: false }}
-      />
-      <Tabs.Screen
-        name="tts"
-        options={{ title: 'TTS', headerShown: false }}
-      />
-    </Tabs>
+    <NativeTabs>
+      <NativeTabs.Trigger name="index">
+        <Label>Home</Label>
+        <Icon sf="house.fill" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="tts">
+        <Label>TTS</Label>
+        <Icon sf="speaker.1.fill" />
+      </NativeTabs.Trigger>
+    </NativeTabs>
   )
 }
