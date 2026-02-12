@@ -1,6 +1,6 @@
 import Foundation
 
-class ThinkingStateMachine {
+struct ThinkingStateMachine {
     enum Output {
         case token(String)
         case thinkingStart
@@ -21,7 +21,7 @@ class ThinkingStateMachine {
     private let openTag = "<think>"
     private let closeTag = "</think>"
 
-    func process(token: String) -> [Output] {
+    mutating func process(token: String) -> [Output] {
         var outputs: [Output] = []
         var remaining = token
 
@@ -44,7 +44,7 @@ class ThinkingStateMachine {
         return outputs
     }
 
-    func flush() -> [Output] {
+    mutating func flush() -> [Output] {
         var outputs: [Output] = []
 
         switch state {
@@ -68,7 +68,7 @@ class ThinkingStateMachine {
         return outputs
     }
 
-    private func processIdle(_ remaining: inout String) -> [Output] {
+    private mutating func processIdle(_ remaining: inout String) -> [Output] {
         var outputs: [Output] = []
 
         if let tagRange = remaining.range(of: openTag) {
@@ -95,7 +95,7 @@ class ThinkingStateMachine {
         return outputs
     }
 
-    private func processBufferingOpenTag(buffer: String, remaining: inout String) -> [Output] {
+    private mutating func processBufferingOpenTag(buffer: String, remaining: inout String) -> [Output] {
         var outputs: [Output] = []
         let combined = buffer + remaining
 
@@ -127,7 +127,7 @@ class ThinkingStateMachine {
         return outputs
     }
 
-    private func processInThinking(_ remaining: inout String) -> [Output] {
+    private mutating func processInThinking(_ remaining: inout String) -> [Output] {
         var outputs: [Output] = []
 
         if let tagRange = remaining.range(of: closeTag) {
@@ -157,7 +157,7 @@ class ThinkingStateMachine {
         return outputs
     }
 
-    private func processBufferingCloseTag(buffer: String, remaining: inout String) -> [Output] {
+    private mutating func processBufferingCloseTag(buffer: String, remaining: inout String) -> [Output] {
         var outputs: [Output] = []
         let combined = buffer + remaining
 
@@ -193,7 +193,7 @@ class ThinkingStateMachine {
     }
 
     private func findPartialMatch(_ str: String, target: String) -> (range: Range<String.Index>, matched: String)? {
-        for i in 1..<target.count {
+        for i in stride(from: target.count - 1, through: 1, by: -1) {
             let suffix = String(str.suffix(i))
             let prefix = String(target.prefix(i))
             if suffix == prefix {

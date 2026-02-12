@@ -1,99 +1,132 @@
 import Foundation
 import NitroModules
 
-class StreamEventEmitter {
+struct StreamEventEmitter {
     private let callback: (String) -> Void
+    private let encoder = JSONEncoder()
 
     init(callback: @escaping (String) -> Void) {
         self.callback = callback
     }
 
-    private func emit(_ dict: [String: Any]) {
-        callback(dictionaryToJson(dict))
+    private func emit<T: Encodable>(_ event: T) {
+        guard let data = try? encoder.encode(event),
+              let json = String(data: data, encoding: .utf8) else { return }
+        callback(json)
     }
 
     private func timestamp() -> Double {
         Date().timeIntervalSince1970 * 1000
     }
 
+    struct GenerationStartEvent: Encodable {
+        let type = "generation_start"
+        let timestamp: Double
+    }
+
+    struct TokenEvent: Encodable {
+        let type = "token"
+        let token: String
+    }
+
+    struct ThinkingStartEvent: Encodable {
+        let type = "thinking_start"
+        let timestamp: Double
+    }
+
+    struct ThinkingChunkEvent: Encodable {
+        let type = "thinking_chunk"
+        let chunk: String
+    }
+
+    struct ThinkingEndEvent: Encodable {
+        let type = "thinking_end"
+        let content: String
+        let timestamp: Double
+    }
+
+    struct ToolCallStartEvent: Encodable {
+        let type = "tool_call_start"
+        let id: String
+        let name: String
+        let arguments: String
+    }
+
+    struct ToolCallExecutingEvent: Encodable {
+        let type = "tool_call_executing"
+        let id: String
+    }
+
+    struct ToolCallCompletedEvent: Encodable {
+        let type = "tool_call_completed"
+        let id: String
+        let result: String
+    }
+
+    struct ToolCallFailedEvent: Encodable {
+        let type = "tool_call_failed"
+        let id: String
+        let error: String
+    }
+
+    struct StatsPayload: Encodable {
+        let tokenCount: Double
+        let tokensPerSecond: Double
+        let timeToFirstToken: Double
+        let totalTime: Double
+    }
+
+    struct GenerationEndEvent: Encodable {
+        let type = "generation_end"
+        let content: String
+        let stats: StatsPayload
+    }
+
     func emitGenerationStart() {
-        emit([
-            "type": "generation_start",
-            "timestamp": timestamp()
-        ])
+        emit(GenerationStartEvent(timestamp: timestamp()))
     }
 
     func emitToken(_ token: String) {
-        emit([
-            "type": "token",
-            "token": token
-        ])
+        emit(TokenEvent(token: token))
     }
 
     func emitThinkingStart() {
-        emit([
-            "type": "thinking_start",
-            "timestamp": timestamp()
-        ])
+        emit(ThinkingStartEvent(timestamp: timestamp()))
     }
 
     func emitThinkingChunk(_ chunk: String) {
-        emit([
-            "type": "thinking_chunk",
-            "chunk": chunk
-        ])
+        emit(ThinkingChunkEvent(chunk: chunk))
     }
 
     func emitThinkingEnd(_ content: String) {
-        emit([
-            "type": "thinking_end",
-            "content": content,
-            "timestamp": timestamp()
-        ])
+        emit(ThinkingEndEvent(content: content, timestamp: timestamp()))
     }
 
     func emitToolCallStart(id: String, name: String, arguments: String) {
-        emit([
-            "type": "tool_call_start",
-            "id": id,
-            "name": name,
-            "arguments": arguments
-        ])
+        emit(ToolCallStartEvent(id: id, name: name, arguments: arguments))
     }
 
     func emitToolCallExecuting(id: String) {
-        emit([
-            "type": "tool_call_executing",
-            "id": id
-        ])
+        emit(ToolCallExecutingEvent(id: id))
     }
 
     func emitToolCallCompleted(id: String, result: String) {
-        emit([
-            "type": "tool_call_completed",
-            "id": id,
-            "result": result
-        ])
+        emit(ToolCallCompletedEvent(id: id, result: result))
     }
 
     func emitToolCallFailed(id: String, error: String) {
-        emit([
-            "type": "tool_call_failed",
-            "id": id,
-            "error": error
-        ])
+        emit(ToolCallFailedEvent(id: id, error: error))
     }
 
     func emitGenerationEnd(content: String, stats: GenerationStats) {
-        emit([
-            "type": "generation_end",
-            "content": content,
-            "stats": [
-                "tokenCount": stats.tokenCount,
-                "tokensPerSecond": stats.tokensPerSecond,
-                "timeToFirstToken": stats.timeToFirstToken,
-                "totalTime": stats.totalTime
-            ]
-        ])
+        emit(GenerationEndEvent(
+            content: content,
+            stats: StatsPayload(
+                tokenCount: stats.tokenCount,
+                tokensPerSecond: stats.tokensPerSecond,
+                timeToFirstToken: stats.timeToFirstToken,
+                totalTime: stats.totalTime
+            )
+        ))
     }
 }
