@@ -90,6 +90,9 @@
       "requireCleanWorkingDir": false
     },
     "plugins": {
+      "@release-it/bumper": {
+        "out": "package.json"
+      },
       "@release-it/conventional-changelog": {
         "preset": {
           "name": "conventionalcommits",
