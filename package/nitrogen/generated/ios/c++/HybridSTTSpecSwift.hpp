@@ -105,8 +105,16 @@ namespace margelo::nitro::mlxreactnative {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::shared_ptr<Promise<void>> startListening(const std::function<void(const std::string& /* token */)>& onToken, const std::function<void(const std::string& /* error */)>& onError) override {
-      auto __result = _swiftPart.startListening(onToken, onError);
+    inline std::shared_ptr<Promise<void>> startListening() override {
+      auto __result = _swiftPart.startListening();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<std::string>> transcribeBuffer() override {
+      auto __result = _swiftPart.transcribeBuffer();
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

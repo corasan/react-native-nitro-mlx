@@ -22,6 +22,7 @@ namespace margelo::nitro::mlxreactnative {
       prototype.registerHybridMethod("transcribe", &HybridSTTSpec::transcribe);
       prototype.registerHybridMethod("transcribeStream", &HybridSTTSpec::transcribeStream);
       prototype.registerHybridMethod("startListening", &HybridSTTSpec::startListening);
+      prototype.registerHybridMethod("transcribeBuffer", &HybridSTTSpec::transcribeBuffer);
       prototype.registerHybridMethod("stopListening", &HybridSTTSpec::stopListening);
       prototype.registerHybridMethod("stop", &HybridSTTSpec::stop);
       prototype.registerHybridMethod("unload", &HybridSTTSpec::unload);

@@ -26,10 +26,8 @@ export interface STT extends HybridObject<{ ios: 'swift' }> {
     onToken: (token: string) => void
   ): Promise<string>
 
-  startListening(
-    onToken: (token: string) => void,
-    onError: (error: string) => void
-  ): Promise<void>
+  startListening(): Promise<void>
+  transcribeBuffer(): Promise<string>
   stopListening(): Promise<string>
 
   stop(): void

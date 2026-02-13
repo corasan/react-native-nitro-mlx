@@ -29,11 +29,12 @@ export const STT = {
     return getInstance().transcribeStream(audio, onToken)
   },
 
-  startListening(
-    onToken: (token: string) => void,
-    onError: (error: string) => void
-  ): Promise<void> {
-    return getInstance().startListening(onToken, onError)
+  startListening(): Promise<void> {
+    return getInstance().startListening()
+  },
+
+  transcribeBuffer(): Promise<string> {
+    return getInstance().transcribeBuffer()
   },
 
   stopListening(): Promise<string> {

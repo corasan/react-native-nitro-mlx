@@ -60,7 +60,8 @@ namespace margelo::nitro::mlxreactnative {
       virtual std::shared_ptr<Promise<void>> load(const std::string& modelId, const std::optional<STTLoadOptions>& options) = 0;
       virtual std::shared_ptr<Promise<std::string>> transcribe(const std::shared_ptr<ArrayBuffer>& audio) = 0;
       virtual std::shared_ptr<Promise<std::string>> transcribeStream(const std::shared_ptr<ArrayBuffer>& audio, const std::function<void(const std::string& /* token */)>& onToken) = 0;
-      virtual std::shared_ptr<Promise<void>> startListening(const std::function<void(const std::string& /* token */)>& onToken, const std::function<void(const std::string& /* error */)>& onError) = 0;
+      virtual std::shared_ptr<Promise<void>> startListening() = 0;
+      virtual std::shared_ptr<Promise<std::string>> transcribeBuffer() = 0;
       virtual std::shared_ptr<Promise<std::string>> stopListening() = 0;
       virtual void stop() = 0;
       virtual void unload() = 0;

@@ -15,8 +15,6 @@ class HybridSTT: HybridSTTSpec {
   private var activeTask: Task<Any, Error>?
   private var loadTask: Task<Void, Error>?
   private var captureManager: AudioCaptureManager?
-  private var listeningOnToken: ((String) -> Void)?
-  private var listeningOnError: ((String) -> Void)?
 
   var isLoaded: Bool { model != nil }
   var isTranscribing: Bool { activeTask != nil }
@@ -112,10 +110,7 @@ class HybridSTT: HybridSTTSpec {
     }
   }
 
-  func startListening(
-    onToken: @escaping (_ token: String) -> Void,
-    onError: @escaping (_ error: String) -> Void
-  ) throws -> Promise<Void> {
+  func startListening() throws -> Promise<Void> {
     guard model != nil else {
       throw STTError.notLoaded
     }
@@ -124,11 +119,35 @@ class HybridSTT: HybridSTTSpec {
     }
 
     return Promise.async { [self] in
-      self.listeningOnToken = onToken
-      self.listeningOnError = onError
       let manager = AudioCaptureManager()
       self.captureManager = manager
       try await manager.startCapturing()
+    }
+  }
+
+  func transcribeBuffer() throws -> Promise<String> {
+    guard let model else {
+      throw STTError.notLoaded
+    }
+    guard let manager = captureManager, manager.isCapturing else {
+      throw STTError.notListening
+    }
+    guard let audio = manager.snapshot() else {
+      return Promise.resolved(withResult: "")
+    }
+
+    return Promise.async { [self] in
+      let task = Task<Any, Error> {
+        let output = model.generate(audio: audio)
+        return output.text as Any
+      }
+
+      self.activeTask = task
+      defer { self.activeTask = nil }
+
+      let result = try await task.value as! String
+      MLX.Memory.clearCache()
+      return result
     }
   }
 
@@ -140,40 +159,21 @@ class HybridSTT: HybridSTTSpec {
       throw STTError.notListening
     }
 
-    let onToken = self.listeningOnToken
+    let audio = manager.stopCapturing()
+    self.captureManager = nil
 
     return Promise.async { [self] in
-      let audio = manager.stopCapturing()
-      self.captureManager = nil
-
       let task = Task<Any, Error> {
-        let stream = model.generateStream(audio: audio)
-        var finalText = ""
-
-        for try await event in stream {
-          if Task.isCancelled { break }
-
-          switch event {
-          case .token(let token):
-            onToken?(token)
-          case .result(let output):
-            finalText = output.text
-          case .info:
-            break
-          }
-        }
-
-        return finalText as Any
+        let output = model.generate(audio: audio)
+        return output.text as Any
       }
 
       self.activeTask = task
-      defer {
-        self.activeTask = nil
-        self.listeningOnToken = nil
-        self.listeningOnError = nil
-      }
+      defer { self.activeTask = nil }
 
-      return try await task.value as! String
+      let result = try await task.value as! String
+      MLX.Memory.clearCache()
+      return result
     }
   }
 
@@ -184,8 +184,6 @@ class HybridSTT: HybridSTTSpec {
       _ = manager.stopCapturing()
     }
     captureManager = nil
-    listeningOnToken = nil
-    listeningOnError = nil
   }
 
   func unload() throws {
@@ -197,8 +195,6 @@ class HybridSTT: HybridSTTSpec {
       _ = manager.stopCapturing()
     }
     captureManager = nil
-    listeningOnToken = nil
-    listeningOnError = nil
     model = nil
     modelId = ""
     Memory.clearCache()

@@ -77,6 +77,25 @@ class AudioCaptureManager {
     try audioEngine.start()
   }
 
+  func snapshotAndClear() -> MLXArray? {
+    bufferLock.lock()
+    let samples = audioBuffer
+    audioBuffer.removeAll()
+    bufferLock.unlock()
+
+    guard samples.count >= 8000 else { return nil }
+    return MLXArray(samples)
+  }
+
+  func snapshot() -> MLXArray? {
+    bufferLock.lock()
+    let samples = audioBuffer
+    bufferLock.unlock()
+
+    guard samples.count >= 16000 else { return nil }
+    return MLXArray(samples)
+  }
+
   func stopCapturing() -> MLXArray {
     audioEngine.inputNode.removeTap(onBus: 0)
     audioEngine.stop()
