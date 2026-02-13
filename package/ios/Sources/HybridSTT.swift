@@ -12,7 +12,7 @@ enum STTError: Error {
 
 class HybridSTT: HybridSTTSpec {
   private var model: GLMASRModel?
-  private var activeTask: Task<Any, Error>?
+  private var activeTask: Task<String, Error>?
   private var loadTask: Task<Void, Error>?
   private var captureManager: AudioCaptureManager?
 
@@ -60,16 +60,16 @@ class HybridSTT: HybridSTTSpec {
     }
 
     return Promise.async { [self] in
-      let task = Task<Any, Error> {
+      let task = Task<String, Error> {
         let mlxAudio = self.arrayBufferToMLXArray(audio)
         let output = model.generate(audio: mlxAudio)
-        return output.text as Any
+        return output.text
       }
 
       self.activeTask = task
       defer { self.activeTask = nil }
 
-      return try await task.value as! String
+      return try await task.value
     }
   }
 
@@ -82,7 +82,7 @@ class HybridSTT: HybridSTTSpec {
     }
 
     return Promise.async { [self] in
-      let task = Task<Any, Error> {
+      let task = Task<String, Error> {
         let mlxAudio = self.arrayBufferToMLXArray(audio)
         let stream = model.generateStream(audio: mlxAudio)
         var finalText = ""
@@ -100,13 +100,13 @@ class HybridSTT: HybridSTTSpec {
           }
         }
 
-        return finalText as Any
+        return finalText
       }
 
       self.activeTask = task
       defer { self.activeTask = nil }
 
-      return try await task.value as! String
+      return try await task.value
     }
   }
 
@@ -137,15 +137,15 @@ class HybridSTT: HybridSTTSpec {
     }
 
     return Promise.async { [self] in
-      let task = Task<Any, Error> {
+      let task = Task<String, Error> {
         let output = model.generate(audio: audio)
-        return output.text as Any
+        return output.text
       }
 
       self.activeTask = task
       defer { self.activeTask = nil }
 
-      let result = try await task.value as! String
+      let result = try await task.value
       MLX.Memory.clearCache()
       return result
     }
@@ -163,15 +163,15 @@ class HybridSTT: HybridSTTSpec {
     self.captureManager = nil
 
     return Promise.async { [self] in
-      let task = Task<Any, Error> {
+      let task = Task<String, Error> {
         let output = model.generate(audio: audio)
-        return output.text as Any
+        return output.text
       }
 
       self.activeTask = task
       defer { self.activeTask = nil }
 
-      let result = try await task.value as! String
+      let result = try await task.value
       MLX.Memory.clearCache()
       return result
     }
