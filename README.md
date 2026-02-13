@@ -81,9 +81,9 @@ LLM.stop()
 ### Text-to-Speech
 
 ```typescript
-import { TTS } from 'react-native-nitro-mlx'
+import { TTS, MLXModel } from 'react-native-nitro-mlx'
 
-await TTS.load('mlx-community/pocket-tts', {
+await TTS.load(MLXModel.PocketTTS, {
   onProgress: (progress) => {
     console.log(`Loading: ${(progress * 100).toFixed(0)}%`)
   }
@@ -105,9 +105,9 @@ Available voices: `alba`, `azelma`, `cosette`, `eponine`, `fantine`, `javert`, `
 ### Speech-to-Text
 
 ```typescript
-import { STT } from 'react-native-nitro-mlx'
+import { STT, MLXModel } from 'react-native-nitro-mlx'
 
-await STT.load('mlx-community/GLM-ASR-Nano-2512-4bit', {
+await STT.load(MLXModel.GLM_ASR_Nano_4bit, {
   onProgress: (progress) => {
     console.log(`Loading: ${(progress * 100).toFixed(0)}%`)
   }
