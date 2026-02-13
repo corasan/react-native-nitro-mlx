@@ -11,7 +11,7 @@
     "build": "rm -rf lib && bun typecheck && bob build",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf android/build node_modules/**/android/build lib android/.cxx node_modules/**/android/.cxx",
-    "release": "release-it && npm publish",
+    "release": "release-it",
     "specs": "bun typecheck && nitrogen --logLevel=\\\"debug\\\" && bun run build",
     "specs:pod": "bun specs && bun --cwd ../example pod"
   },
@@ -82,7 +82,8 @@
     },
     "hooks": {
       "after:bump": "bun specs",
-      "before:release": "bun run build"
+      "before:release": "bun run build",
+      "after:release": "npm publish --ignore-scripts"
     },
     "git": {
       "commitMessage": "chore: release ${version}",
