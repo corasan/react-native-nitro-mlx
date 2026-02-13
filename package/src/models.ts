@@ -6,6 +6,7 @@ export enum ModelFamily {
   SmolLM = 'SmolLM',
   OpenELM = 'OpenELM',
   PocketTTS = 'PocketTTS',
+  GLMASR = 'GLMASR',
 }
 
 export enum ModelProvider {
@@ -20,7 +21,7 @@ export enum ModelProvider {
 
 export type ModelQuantization = '4bit' | '8bit' | 'bf16'
 
-export type ModelType = 'llm' | 'tts'
+export type ModelType = 'llm' | 'tts' | 'stt'
 
 export interface ModelInfo {
   id: MLXModel
@@ -82,6 +83,9 @@ export enum MLXModel {
   PocketTTS = 'mlx-community/pocket-tts',
   PocketTTS_8bit = 'mlx-community/pocket-tts-8bit',
   PocketTTS_4bit = 'mlx-community/pocket-tts-4bit',
+
+  // GLM-ASR (GLMASR) - Speech-to-Text
+  GLM_ASR_Nano_4bit = 'mlx-community/GLM-ASR-Nano-2512-4bit',
 }
 
 export const MLXModels: ModelInfo[] = [
@@ -374,5 +378,15 @@ export const MLXModels: ModelInfo[] = [
     displayName: 'PocketTTS (4-bit)',
     downloadSize: 80000000,
     type: 'tts',
+  },
+  {
+    id: MLXModel.GLM_ASR_Nano_4bit,
+    family: ModelFamily.GLMASR,
+    provider: ModelProvider.Alibaba,
+    parameters: '1B',
+    quantization: '4bit',
+    displayName: 'GLM-ASR Nano (4-bit)',
+    downloadSize: 600000000,
+    type: 'stt',
   },
 ]

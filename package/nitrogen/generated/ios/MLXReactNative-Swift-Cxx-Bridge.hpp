@@ -16,12 +16,16 @@ namespace margelo::nitro::mlxreactnative { struct GenerationStats; }
 namespace margelo::nitro::mlxreactnative { class HybridLLMSpec; }
 // Forward declaration of `HybridModelManagerSpec` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { class HybridModelManagerSpec; }
+// Forward declaration of `HybridSTTSpec` to properly resolve imports.
+namespace margelo::nitro::mlxreactnative { class HybridSTTSpec; }
 // Forward declaration of `HybridTTSSpec` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { class HybridTTSSpec; }
 // Forward declaration of `LLMLoadOptions` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct LLMLoadOptions; }
 // Forward declaration of `LLMMessage` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct LLMMessage; }
+// Forward declaration of `STTLoadOptions` to properly resolve imports.
+namespace margelo::nitro::mlxreactnative { struct STTLoadOptions; }
 // Forward declaration of `TTSGenerateOptions` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct TTSGenerateOptions; }
 // Forward declaration of `TTSLoadOptions` to properly resolve imports.
@@ -36,6 +40,8 @@ namespace margelo::nitro::mlxreactnative { struct ToolParameter; }
 namespace MLXReactNative { class HybridLLMSpec_cxx; }
 // Forward declaration of `HybridModelManagerSpec_cxx` to properly resolve imports.
 namespace MLXReactNative { class HybridModelManagerSpec_cxx; }
+// Forward declaration of `HybridSTTSpec_cxx` to properly resolve imports.
+namespace MLXReactNative { class HybridSTTSpec_cxx; }
 // Forward declaration of `HybridTTSSpec_cxx` to properly resolve imports.
 namespace MLXReactNative { class HybridTTSSpec_cxx; }
 
@@ -43,9 +49,11 @@ namespace MLXReactNative { class HybridTTSSpec_cxx; }
 #include "GenerationStats.hpp"
 #include "HybridLLMSpec.hpp"
 #include "HybridModelManagerSpec.hpp"
+#include "HybridSTTSpec.hpp"
 #include "HybridTTSSpec.hpp"
 #include "LLMLoadOptions.hpp"
 #include "LLMMessage.hpp"
+#include "STTLoadOptions.hpp"
 #include "TTSGenerateOptions.hpp"
 #include "TTSLoadOptions.hpp"
 #include "ToolDefinition.hpp"
@@ -582,6 +590,33 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
   inline Result_std__shared_ptr_Promise_std__vector_std__string____ create_Result_std__shared_ptr_Promise_std__vector_std__string____(const std::exception_ptr& error) noexcept {
     return Result<std::shared_ptr<Promise<std::vector<std::string>>>>::withError(error);
   }
+  
+  // pragma MARK: std::optional<STTLoadOptions>
+  /**
+   * Specialized version of `std::optional<STTLoadOptions>`.
+   */
+  using std__optional_STTLoadOptions_ = std::optional<STTLoadOptions>;
+  inline std::optional<STTLoadOptions> create_std__optional_STTLoadOptions_(const STTLoadOptions& value) noexcept {
+    return std::optional<STTLoadOptions>(value);
+  }
+  inline bool has_value_std__optional_STTLoadOptions_(const std::optional<STTLoadOptions>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline STTLoadOptions get_std__optional_STTLoadOptions_(const std::optional<STTLoadOptions>& optional) noexcept {
+    return *optional;
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridSTTSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridSTTSpec>`.
+   */
+  using std__shared_ptr_HybridSTTSpec_ = std::shared_ptr<HybridSTTSpec>;
+  std::shared_ptr<HybridSTTSpec> create_std__shared_ptr_HybridSTTSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridSTTSpec_(std__shared_ptr_HybridSTTSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridSTTSpec>
+  using std__weak_ptr_HybridSTTSpec_ = std::weak_ptr<HybridSTTSpec>;
+  inline std__weak_ptr_HybridSTTSpec_ weakify_std__shared_ptr_HybridSTTSpec_(const std::shared_ptr<HybridSTTSpec>& strong) noexcept { return strong; }
   
   // pragma MARK: std::optional<TTSLoadOptions>
   /**

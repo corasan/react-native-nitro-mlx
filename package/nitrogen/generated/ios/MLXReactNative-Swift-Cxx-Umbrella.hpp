@@ -14,12 +14,16 @@ namespace margelo::nitro::mlxreactnative { struct GenerationStats; }
 namespace margelo::nitro::mlxreactnative { class HybridLLMSpec; }
 // Forward declaration of `HybridModelManagerSpec` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { class HybridModelManagerSpec; }
+// Forward declaration of `HybridSTTSpec` to properly resolve imports.
+namespace margelo::nitro::mlxreactnative { class HybridSTTSpec; }
 // Forward declaration of `HybridTTSSpec` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { class HybridTTSSpec; }
 // Forward declaration of `LLMLoadOptions` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct LLMLoadOptions; }
 // Forward declaration of `LLMMessage` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct LLMMessage; }
+// Forward declaration of `STTLoadOptions` to properly resolve imports.
+namespace margelo::nitro::mlxreactnative { struct STTLoadOptions; }
 // Forward declaration of `TTSGenerateOptions` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct TTSGenerateOptions; }
 // Forward declaration of `TTSLoadOptions` to properly resolve imports.
@@ -33,9 +37,11 @@ namespace margelo::nitro::mlxreactnative { struct ToolParameter; }
 #include "GenerationStats.hpp"
 #include "HybridLLMSpec.hpp"
 #include "HybridModelManagerSpec.hpp"
+#include "HybridSTTSpec.hpp"
 #include "HybridTTSSpec.hpp"
 #include "LLMLoadOptions.hpp"
 #include "LLMMessage.hpp"
+#include "STTLoadOptions.hpp"
 #include "TTSGenerateOptions.hpp"
 #include "TTSLoadOptions.hpp"
 #include "ToolDefinition.hpp"
@@ -65,6 +71,8 @@ namespace margelo::nitro::mlxreactnative { struct ToolParameter; }
 namespace MLXReactNative { class HybridLLMSpec_cxx; }
 // Forward declaration of `HybridModelManagerSpec_cxx` to properly resolve imports.
 namespace MLXReactNative { class HybridModelManagerSpec_cxx; }
+// Forward declaration of `HybridSTTSpec_cxx` to properly resolve imports.
+namespace MLXReactNative { class HybridSTTSpec_cxx; }
 // Forward declaration of `HybridTTSSpec_cxx` to properly resolve imports.
 namespace MLXReactNative { class HybridTTSSpec_cxx; }
 

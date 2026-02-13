@@ -42,3 +42,9 @@ export type {
   TTSLoadOptions,
   TTSGenerateOptions,
 } from './specs/TTS.nitro'
+export { STT } from './stt'
+export type {
+  STT as STTSpec,
+  STTLoadOptions,
+  STTTranscriptionInfo,
+} from './specs/STT.nitro'
