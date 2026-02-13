@@ -12,6 +12,7 @@
 
 #include "HybridLLMSpecSwift.hpp"
 #include "HybridModelManagerSpecSwift.hpp"
+#include "HybridTTSSpecSwift.hpp"
 
 @interface MLXReactNativeAutolinking : NSObject
 @end
@@ -33,6 +34,13 @@
     "ModelManager",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridModelManagerSpec> hybridObject = MLXReactNative::MLXReactNativeAutolinking::createModelManager();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "TTS",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridTTSSpec> hybridObject = MLXReactNative::MLXReactNativeAutolinking::createTTS();
       return hybridObject;
     }
   );

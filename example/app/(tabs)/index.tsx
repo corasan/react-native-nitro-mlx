@@ -14,10 +14,16 @@ import {
   View,
 } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
-import { createTool, LLM, MLXModel, ModelManager, type StreamEvent } from 'react-native-nitro-mlx'
+import {
+  createTool,
+  LLM,
+  MLXModel,
+  ModelManager,
+  type StreamEvent,
+} from 'react-native-nitro-mlx'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { z } from 'zod'
-import { useBenchmark } from '../components/benchmark-context'
+import { useBenchmark } from '../../components/benchmark-context'
 
 const MODEL_ID = MLXModel.Qwen3_1_7B_4bit
 
@@ -147,7 +153,13 @@ const ToolCallBlock = ({ toolCall }: { toolCall: ToolCallBlockData }) => {
   )
 }
 
-const ThinkingBlock = ({ thinking, isStreaming }: { thinking: string; isStreaming?: boolean }) => {
+const ThinkingBlock = ({
+  thinking,
+  isStreaming,
+}: {
+  thinking: string
+  isStreaming?: boolean
+}) => {
   const [expanded, setExpanded] = useState(false)
   const colorScheme = useColorScheme()
   const textColor = colorScheme === 'dark' ? '#aaa' : '#666'
@@ -163,7 +175,9 @@ const ThinkingBlock = ({ thinking, isStreaming }: { thinking: string; isStreamin
         <Text style={[styles.thinkingLabel, { color: textColor }]}>
           {expanded ? '▼' : '▶'} Thinking
         </Text>
-        {isStreaming && <ActivityIndicator size="small" color="#888" style={{ marginLeft: 8 }} />}
+        {isStreaming && (
+          <ActivityIndicator size="small" color="#888" style={{ marginLeft: 8 }} />
+        )}
       </View>
       {expanded && (
         <Text style={[styles.thinkingText, { color: textColor }]}>{thinking}</Text>
@@ -172,7 +186,13 @@ const ThinkingBlock = ({ thinking, isStreaming }: { thinking: string; isStreamin
   )
 }
 
-const MessageItem = ({ content, blocks, currentThinking, isCurrentlyThinking, isUser }: Message) => {
+const MessageItem = ({
+  content,
+  blocks,
+  currentThinking,
+  isCurrentlyThinking,
+  isUser,
+}: Message) => {
   const colorScheme = useColorScheme()
   const textColor = colorScheme === 'dark' ? 'white' : 'black'
 
@@ -188,9 +208,9 @@ const MessageItem = ({ content, blocks, currentThinking, isCurrentlyThinking, is
     <View style={styles.message}>
       {blocks?.map((block, index) =>
         block.type === 'thinking' ? (
-          <ThinkingBlock key={`block-${index}`} thinking={block.content} />
+          <ThinkingBlock key={`block-${index.toString()}`} thinking={block.content} />
         ) : (
-          <ToolCallBlock key={`block-${index}`} toolCall={block} />
+          <ToolCallBlock key={`block-${index.toString()}`} toolCall={block} />
         ),
       )}
       {isCurrentlyThinking && (
@@ -327,7 +347,10 @@ export default function ChatScreen() {
           setMessages(prev =>
             prev.map(msg => {
               if (msg.id !== assistantMessageId) return msg
-              const thinkingBlock: ThinkingBlockData = { type: 'thinking', content: event.content }
+              const thinkingBlock: ThinkingBlockData = {
+                type: 'thinking',
+                content: event.content,
+              }
               return {
                 ...msg,
                 blocks: [...(msg.blocks || []), thinkingBlock],
@@ -341,9 +364,7 @@ export default function ChatScreen() {
         case 'token':
           content += event.token
           setMessages(prev =>
-            prev.map(msg =>
-              msg.id === assistantMessageId ? { ...msg, content } : msg,
-            ),
+            prev.map(msg => (msg.id === assistantMessageId ? { ...msg, content } : msg)),
           )
           break
 
@@ -446,7 +467,8 @@ export default function ChatScreen() {
 
           const { thinking, content } = parseThinkingBlocks(msg.content)
           const existingBlocks = blocksMap.get(index)
-          const blocks: MessageBlock[] = existingBlocks || (thinking ? [{ type: 'thinking', content: thinking }] : [])
+          const blocks: MessageBlock[] =
+            existingBlocks || (thinking ? [{ type: 'thinking', content: thinking }] : [])
 
           return {
             id: `history-${index}`,
@@ -597,6 +619,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingBottom: 50,
   },
   centered: {
     flex: 1,

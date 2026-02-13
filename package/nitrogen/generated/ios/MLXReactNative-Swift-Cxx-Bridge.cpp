@@ -10,6 +10,7 @@
 // Include C++ implementation defined types
 #include "HybridLLMSpecSwift.hpp"
 #include "HybridModelManagerSpecSwift.hpp"
+#include "HybridTTSSpecSwift.hpp"
 #include "MLXReactNative-Swift-Cxx-Umbrella.hpp"
 #include <NitroModules/NitroDefines.hpp>
 
@@ -125,6 +126,30 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
     }
     #endif
     MLXReactNative::HybridModelManagerSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>
+  Func_void_std__shared_ptr_ArrayBuffer_ create_Func_void_std__shared_ptr_ArrayBuffer_(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = MLXReactNative::Func_void_std__shared_ptr_ArrayBuffer_::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::shared_ptr<ArrayBuffer>& result) mutable -> void {
+      swiftClosure.call(ArrayBufferHolder(result));
+    };
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridTTSSpec>
+  std::shared_ptr<HybridTTSSpec> create_std__shared_ptr_HybridTTSSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    MLXReactNative::HybridTTSSpec_cxx swiftPart = MLXReactNative::HybridTTSSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::mlxreactnative::HybridTTSSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridTTSSpec_(std__shared_ptr_HybridTTSSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::mlxreactnative::HybridTTSSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::mlxreactnative::HybridTTSSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridTTSSpec\" is not implemented in Swift!");
+    }
+    #endif
+    MLXReactNative::HybridTTSSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
 

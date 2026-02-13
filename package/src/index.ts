@@ -13,6 +13,7 @@ export {
   type ModelInfo,
   ModelProvider,
   type ModelQuantization,
+  type ModelType,
 } from './models'
 export type {
   GenerationStats,
@@ -35,3 +36,9 @@ export type {
 } from './specs/LLM.nitro'
 export type { ModelManager as ModelManagerSpec } from './specs/ModelManager.nitro'
 export { createTool, type TypeSafeToolDefinition } from './tool-utils'
+export { TTS } from './tts'
+export type {
+  TTS as TTSSpec,
+  TTSLoadOptions,
+  TTSGenerateOptions,
+} from './specs/TTS.nitro'
