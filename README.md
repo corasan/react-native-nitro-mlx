@@ -1,6 +1,6 @@
 # react-native-nitro-mlx
 
-Run LLMs on-device in React Native using [MLX Swift](https://github.com/ml-explore/mlx-swift).
+Run LLMs, Text-to-Speech, and Speech-to-Text on-device in React Native using [MLX Swift](https://github.com/ml-explore/mlx-swift).
 
 ## Requirements
 
@@ -78,6 +78,50 @@ await LLM.stream('Tell me a story', (token) => {
 LLM.stop()
 ```
 
+### Text-to-Speech
+
+```typescript
+import { TTS } from 'react-native-nitro-mlx'
+
+await TTS.load('mlx-community/pocket-tts', {
+  onProgress: (progress) => {
+    console.log(`Loading: ${(progress * 100).toFixed(0)}%`)
+  }
+})
+
+const audioBuffer = await TTS.generate('Hello world!', {
+  voice: 'alba',
+  speed: 1.0
+})
+
+// Or stream audio chunks as they're generated
+await TTS.stream('Hello world!', (chunk) => {
+  // Process each audio chunk
+}, { voice: 'alba' })
+```
+
+Available voices: `alba`, `azelma`, `cosette`, `eponine`, `fantine`, `javert`, `jean`, `marius`
+
+### Speech-to-Text
+
+```typescript
+import { STT } from 'react-native-nitro-mlx'
+
+await STT.load('mlx-community/GLM-ASR-Nano-2512-4bit', {
+  onProgress: (progress) => {
+    console.log(`Loading: ${(progress * 100).toFixed(0)}%`)
+  }
+})
+
+// Transcribe an audio buffer
+const text = await STT.transcribe(audioBuffer)
+
+// Or use live microphone transcription
+await STT.startListening()
+const partial = await STT.transcribeBuffer() // Get current transcript
+const final = await STT.stopListening()      // Stop and get final transcript
+```
+
 ## API
 
 ### LLM
@@ -110,6 +154,50 @@ LLM.stop()
 | `modelId: string` | The currently loaded model ID |
 | `debug: boolean` | Enable debug logging |
 
+### TTS
+
+| Method | Description |
+|--------|-------------|
+| `load(modelId: string, options?: TTSLoadOptions): Promise<void>` | Load a TTS model into memory |
+| `generate(text: string, options?: TTSGenerateOptions): Promise<ArrayBuffer>` | Generate audio from text |
+| `stream(text: string, onAudioChunk: (audio: ArrayBuffer) => void, options?: TTSGenerateOptions): Promise<void>` | Stream audio chunks as they're generated |
+| `stop(): void` | Stop the current generation |
+| `unload(): void` | Unload the model and free memory |
+
+#### TTSGenerateOptions
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `voice` | `string` | Voice to use (alba, azelma, cosette, eponine, fantine, javert, jean, marius) |
+| `speed` | `number` | Speech speed multiplier |
+
+| Property | Description |
+|----------|-------------|
+| `isLoaded: boolean` | Whether a TTS model is loaded |
+| `isGenerating: boolean` | Whether audio generation is in progress |
+| `modelId: string` | The currently loaded model ID |
+| `sampleRate: number` | Audio sample rate of the loaded model (e.g. 24000) |
+
+### STT
+
+| Method | Description |
+|--------|-------------|
+| `load(modelId: string, options?: STTLoadOptions): Promise<void>` | Load an STT model into memory |
+| `transcribe(audio: ArrayBuffer): Promise<string>` | Transcribe an audio buffer |
+| `transcribeStream(audio: ArrayBuffer, onToken: (token: string) => void): Promise<string>` | Stream transcription tokens as they're generated |
+| `startListening(): Promise<void>` | Start capturing audio from the microphone |
+| `transcribeBuffer(): Promise<string>` | Transcribe the current audio buffer while listening |
+| `stopListening(): Promise<string>` | Stop listening and transcribe final audio |
+| `stop(): void` | Stop the current transcription |
+| `unload(): void` | Unload the model and free memory |
+
+| Property | Description |
+|----------|-------------|
+| `isLoaded: boolean` | Whether an STT model is loaded |
+| `isTranscribing: boolean` | Whether transcription is in progress |
+| `isListening: boolean` | Whether the microphone is active |
+| `modelId: string` | The currently loaded model ID |
+
 ### ModelManager
 
 | Method | Description |
@@ -136,7 +224,7 @@ await ModelManager.download(MLXModel.Llama_3_2_1B_Instruct_4bit, (progress) => {
 })
 ```
 
-### Available Models
+### LLM Models
 
 | Model | Enum Key | Hugging Face ID |
 |-------|----------|-----------------|
@@ -175,6 +263,22 @@ await ModelManager.download(MLXModel.Llama_3_2_1B_Instruct_4bit, (progress) => {
 | OpenELM 1.1B 8-bit | `OpenELM_1_1B_8bit` | `mlx-community/OpenELM-1_1B-8bit` |
 | OpenELM 3B 4-bit | `OpenELM_3B_4bit` | `mlx-community/OpenELM-3B-4bit` |
 | OpenELM 3B 8-bit | `OpenELM_3B_8bit` | `mlx-community/OpenELM-3B-8bit` |
+
+### TTS Models
+
+| Model | Enum Key | Hugging Face ID |
+|-------|----------|-----------------|
+| **PocketTTS (Kyutai)** - 44.6M params | | |
+| PocketTTS bf16 | `PocketTTS` | `mlx-community/pocket-tts` |
+| PocketTTS 8-bit | `PocketTTS_8bit` | `mlx-community/pocket-tts-8bit` |
+| PocketTTS 4-bit | `PocketTTS_4bit` | `mlx-community/pocket-tts-4bit` |
+
+### STT Models
+
+| Model | Enum Key | Hugging Face ID |
+|-------|----------|-----------------|
+| **GLM-ASR (Alibaba)** - 1B params | | |
+| GLM-ASR Nano 4-bit | `GLM_ASR_Nano_4bit` | `mlx-community/GLM-ASR-Nano-2512-4bit` |
 
 Browse more models at [huggingface.co/mlx-community](https://huggingface.co/mlx-community).
 
