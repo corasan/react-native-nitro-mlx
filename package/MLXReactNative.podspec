@@ -31,7 +31,7 @@ Pod::Spec.new do |s|
   spm_dependency(s,
     url: "https://github.com/Blaizzy/mlx-audio-swift.git",
     requirement: {kind: "branch", branch: "main"},
-    products: ["MLXAudioTTS", "MLXAudioCore"]
+    products: ["MLXAudioTTS", "MLXAudioSTT", "MLXAudioCore"]
   )
 
   s.pod_target_xcconfig = {

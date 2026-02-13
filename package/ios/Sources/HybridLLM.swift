@@ -479,21 +479,32 @@ class HybridLLM: HybridLLMSpec {
             log("Executing \(pendingToolCalls.count) tool call(s)")
 
             let toolStartTime = Date()
-            var allToolResults: [String] = []
 
-            for (id, tool, argsDict, _) in pendingToolCalls {
-                emitter.emitToolCallExecuting(id: id)
+            for call in pendingToolCalls {
+                emitter.emitToolCallExecuting(id: call.id)
+            }
 
-                do {
-                    let resultJson = try await executeToolCall(tool: tool, argsDict: argsDict)
-                    log("Tool result for \(tool.name): \(resultJson.prefix(100))...")
-                    emitter.emitToolCallCompleted(id: id, result: resultJson)
-                    allToolResults.append(resultJson)
-                } catch {
-                    log("Tool execution error for \(tool.name): \(error)")
-                    emitter.emitToolCallFailed(id: id, error: error.localizedDescription)
-                    allToolResults.append("{\"error\": \"Tool execution failed\"}")
+            let allToolResults: [String] = await withTaskGroup(of: (Int, String).self) { group in
+                for (index, call) in pendingToolCalls.enumerated() {
+                    group.addTask { [self] in
+                        do {
+                            let resultJson = try await self.executeToolCall(tool: call.tool, argsDict: call.args)
+                            self.log("Tool result for \(call.tool.name): \(resultJson.prefix(100))...")
+                            emitter.emitToolCallCompleted(id: call.id, result: resultJson)
+                            return (index, resultJson)
+                        } catch {
+                            self.log("Tool execution error for \(call.tool.name): \(error)")
+                            emitter.emitToolCallFailed(id: call.id, error: error.localizedDescription)
+                            return (index, "{\"error\": \"Tool execution failed\"}")
+                        }
+                    }
                 }
+
+                var results = Array(repeating: "", count: pendingToolCalls.count)
+                for await (index, result) in group {
+                    results[index] = result
+                }
+                return results
             }
 
             toolExecutionTime += Date().timeIntervalSince(toolStartTime) * 1000
@@ -586,17 +597,25 @@ class HybridLLM: HybridLLMSpec {
         if !pendingToolCalls.isEmpty {
             log("Executing \(pendingToolCalls.count) tool call(s)")
 
-            var allToolResults: [String] = []
-
-            for (tool, argsDict, _) in pendingToolCalls {
-                do {
-                    let resultJson = try await executeToolCall(tool: tool, argsDict: argsDict)
-                    log("Tool result for \(tool.name): \(resultJson.prefix(100))...")
-                    allToolResults.append(resultJson)
-                } catch {
-                    log("Tool execution error for \(tool.name): \(error)")
-                    allToolResults.append("{\"error\": \"Tool execution failed\"}")
+            let allToolResults: [String] = await withTaskGroup(of: (Int, String).self) { group in
+                for (index, call) in pendingToolCalls.enumerated() {
+                    group.addTask { [self] in
+                        do {
+                            let resultJson = try await self.executeToolCall(tool: call.tool, argsDict: call.args)
+                            self.log("Tool result for \(call.tool.name): \(resultJson.prefix(100))...")
+                            return (index, resultJson)
+                        } catch {
+                            self.log("Tool execution error for \(call.tool.name): \(error)")
+                            return (index, "{\"error\": \"Tool execution failed\"}")
+                        }
+                    }
                 }
+
+                var results = Array(repeating: "", count: pendingToolCalls.count)
+                for await (index, result) in group {
+                    results[index] = result
+                }
+                return results
             }
 
             if !output.isEmpty {

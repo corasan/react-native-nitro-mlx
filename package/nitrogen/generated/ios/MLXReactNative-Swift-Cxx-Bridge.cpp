@@ -10,6 +10,7 @@
 // Include C++ implementation defined types
 #include "HybridLLMSpecSwift.hpp"
 #include "HybridModelManagerSpecSwift.hpp"
+#include "HybridSTTSpecSwift.hpp"
 #include "HybridTTSSpecSwift.hpp"
 #include "MLXReactNative-Swift-Cxx-Umbrella.hpp"
 #include <NitroModules/NitroDefines.hpp>
@@ -126,6 +127,22 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
     }
     #endif
     MLXReactNative::HybridModelManagerSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridSTTSpec>
+  std::shared_ptr<HybridSTTSpec> create_std__shared_ptr_HybridSTTSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    MLXReactNative::HybridSTTSpec_cxx swiftPart = MLXReactNative::HybridSTTSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::mlxreactnative::HybridSTTSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridSTTSpec_(std__shared_ptr_HybridSTTSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::mlxreactnative::HybridSTTSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::mlxreactnative::HybridSTTSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridSTTSpec\" is not implemented in Swift!");
+    }
+    #endif
+    MLXReactNative::HybridSTTSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
   

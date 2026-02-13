@@ -16,7 +16,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.reactnative.mlx.example",
-      "appleTeamId": "M52W2L8ZQV"
+      "appleTeamId": "M52W2L8ZQV",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app uses the microphone for speech-to-text transcription."
+      }
     },
     "android": {
       "adaptiveIcon": {

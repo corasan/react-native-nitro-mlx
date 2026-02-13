@@ -60,6 +60,11 @@ export default function TTSScreen() {
   useFocusEffect(
     useCallback(() => {
       loadModel()
+      return () => {
+        TTS.unload()
+        setStatus('idle')
+        isLoadingRef.current = false
+      }
     }, [loadModel]),
   )
 

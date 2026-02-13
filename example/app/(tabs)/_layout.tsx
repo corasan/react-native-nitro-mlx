@@ -12,6 +12,11 @@ export default function TabsLayout() {
         <Label>TTS</Label>
         <Icon sf="speaker.1.fill" />
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="stt">
+        <Label>STT</Label>
+        <Icon sf="mic.fill" />
+      </NativeTabs.Trigger>
     </NativeTabs>
   )
 }

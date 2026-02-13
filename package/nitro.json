@@ -17,6 +17,9 @@
     },
     "TTS": {
       "swift": "HybridTTS"
+    },
+    "STT": {
+      "swift": "HybridSTT"
     }
   },
   "ignorePaths": ["**/node_modules"]
