@@ -1,6 +1,6 @@
 {
   "name": "react-native-nitro-mlx",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Nitro module package",
   "main": "./lib/module/index.js",
   "module": "./lib/module/index.js",
