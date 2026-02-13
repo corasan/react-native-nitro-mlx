@@ -50,7 +50,13 @@ export default function STTScreen() {
   useFocusEffect(
     useCallback(() => {
       loadModel()
-    }, [loadModel]),
+      return () => {
+        stopPolling()
+        STT.unload()
+        setStatus('idle')
+        isLoadingRef.current = false
+      }
+    }, [loadModel, stopPolling]),
   )
 
   const transcribeChunk = useCallback(async () => {

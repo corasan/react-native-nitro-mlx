@@ -242,12 +242,6 @@ export default function ChatScreen() {
 
   LLM.debug = true
 
-  // useEffect(() => {
-  //   return () => {
-  //     LLM.unload()
-  //   }
-  // }, [])
-
   const openSettings = () => {
     router.push('/settings-modal')
   }
@@ -267,6 +261,11 @@ export default function ChatScreen() {
   useFocusEffect(
     useCallback(() => {
       checkDownloaded()
+      return () => {
+        LLM.unload()
+        setIsReady(false)
+        isLoadingRef.current = false
+      }
     }, [checkDownloaded]),
   )
 
