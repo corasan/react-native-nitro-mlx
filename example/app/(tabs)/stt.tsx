@@ -16,6 +16,14 @@ const MODEL_ID = MLXModel.GLM_ASR_Nano_4bit
 
 type Status = 'idle' | 'loading' | 'ready' | 'listening' | 'transcribing'
 
+const statusText: Record<Status, string> = {
+  idle: '',
+  loading: 'Downloading & loading model...',
+  ready: 'Ready',
+  listening: 'Listening...',
+  transcribing: 'Transcribing...',
+}
+
 export default function STTScreen() {
   const [status, setStatus] = useState<Status>('idle')
   const [transcript, setTranscript] = useState('')
@@ -47,17 +55,12 @@ export default function STTScreen() {
     }
   }, [])
 
-  useFocusEffect(
-    useCallback(() => {
-      loadModel()
-      return () => {
-        stopPolling()
-        STT.unload()
-        setStatus('idle')
-        isLoadingRef.current = false
-      }
-    }, [loadModel, stopPolling]),
-  )
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+  }, [])
 
   const transcribeChunk = useCallback(async () => {
     if (isTranscribingChunk.current) return
@@ -79,18 +82,7 @@ export default function STTScreen() {
     intervalRef.current = setInterval(transcribeChunk, 1000)
   }, [transcribeChunk])
 
-  const stopPolling = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    return () => stopPolling()
-  }, [stopPolling])
-
-  const handleToggleListening = async () => {
+  const handleToggleListening = useCallback(async () => {
     if (status === 'listening') {
       try {
         stopPolling()
@@ -117,7 +109,7 @@ export default function STTScreen() {
         setStatus('ready')
       }
     }
-  }
+  }, [startPolling, status, stopPolling])
 
   const handleClear = () => {
     setTranscript('')
@@ -125,13 +117,21 @@ export default function STTScreen() {
     streamingRef.current = ''
   }
 
-  const statusText: Record<Status, string> = {
-    idle: '',
-    loading: 'Downloading & loading model...',
-    ready: 'Ready',
-    listening: 'Listening...',
-    transcribing: 'Transcribing...',
-  }
+  useEffect(() => {
+    return () => stopPolling()
+  }, [stopPolling])
+
+  useFocusEffect(
+    useCallback(() => {
+      loadModel()
+      return () => {
+        stopPolling()
+        STT.unload()
+        setStatus('idle')
+        isLoadingRef.current = false
+      }
+    }, [loadModel, stopPolling]),
+  )
 
   const displayText = streamingText || transcript
 
