@@ -1,8 +1,8 @@
 import { NitroModules } from 'react-native-nitro-modules'
 import type {
-  TTS as TTSSpec,
-  TTSLoadOptions,
   TTSGenerateOptions,
+  TTSLoadOptions,
+  TTS as TTSSpec,
 } from './specs/TTS.nitro'
 
 let instance: TTSSpec | null = null
@@ -19,17 +19,14 @@ export const TTS = {
     return getInstance().load(modelId, options)
   },
 
-  generate(
-    text: string,
-    options?: TTSGenerateOptions
-  ): Promise<ArrayBuffer> {
+  generate(text: string, options?: TTSGenerateOptions): Promise<ArrayBuffer> {
     return getInstance().generate(text, options)
   },
 
   stream(
     text: string,
     onAudioChunk: (audio: ArrayBuffer) => void,
-    options?: TTSGenerateOptions
+    options?: TTSGenerateOptions,
   ): Promise<void> {
     return getInstance().stream(text, onAudioChunk, options)
   },

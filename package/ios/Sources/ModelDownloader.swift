@@ -18,12 +18,27 @@ actor ModelDownloader: NSObject {
 
     private func fetchFileList(modelId: String) async throws -> [String] {
         let urlString = "https://huggingface.co/api/models/\(modelId)"
-        guard let url = URL(string: urlString) else { return [] }
+        guard let url = URL(string: urlString) else {
+            throw NSError(domain: "ModelDownloader", code: -1, userInfo: [
+                NSLocalizedDescriptionKey: "Invalid model URL for: \(modelId)"
+            ])
+        }
 
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await URLSession.shared.data(from: url)
+
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+            throw NSError(domain: "ModelDownloader", code: httpResponse.statusCode, userInfo: [
+                NSLocalizedDescriptionKey: "Failed to fetch model info for \(modelId): HTTP \(httpResponse.statusCode)"
+            ])
+        }
+
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let siblings = json["siblings"] as? [[String: Any]]
-        else { return [] }
+        else {
+            throw NSError(domain: "ModelDownloader", code: -2, userInfo: [
+                NSLocalizedDescriptionKey: "Invalid model metadata format for: \(modelId)"
+            ])
+        }
 
         return siblings.compactMap { $0["rfilename"] as? String }
             .filter { name in
@@ -72,15 +87,18 @@ actor ModelDownloader: NSObject {
 
             log("Response status: \(httpResponse.statusCode) for \(file)")
 
-            if httpResponse.statusCode == 200 {
-                if fileManager.fileExists(atPath: destURL.path) {
-                    try fileManager.removeItem(at: destURL)
-                }
-                try fileManager.moveItem(at: tempURL, to: destURL)
-                log("Saved: \(file)")
-            } else {
+            guard httpResponse.statusCode == 200 else {
                 log("Failed to download: \(file) - Status: \(httpResponse.statusCode)")
+                throw NSError(domain: "ModelDownloader", code: httpResponse.statusCode, userInfo: [
+                    NSLocalizedDescriptionKey: "Failed to download \(file): HTTP \(httpResponse.statusCode)"
+                ])
             }
+
+            if fileManager.fileExists(atPath: destURL.path) {
+                try fileManager.removeItem(at: destURL)
+            }
+            try fileManager.moveItem(at: tempURL, to: destURL)
+            log("Saved: \(file)")
 
             downloaded += 1
             progressCallback(Double(downloaded) / Double(files.count))
@@ -91,14 +109,19 @@ actor ModelDownloader: NSObject {
 
     func isDownloaded(modelId: String) -> Bool {
         let modelDir = getModelDirectory(modelId: modelId)
-        let requiredFiles = ["config.json", "model.safetensors"]
 
-        let allExist = requiredFiles.allSatisfy { file in
-            fileManager.fileExists(atPath: modelDir.appendingPathComponent(file).path)
+        guard fileManager.fileExists(atPath: modelDir.appendingPathComponent("config.json").path) else {
+            log("isDownloaded(\(modelId)): false (missing config.json)")
+            return false
         }
 
-        log("isDownloaded(\(modelId)): \(allExist)")
-        return allExist
+        // Check for single safetensors file or sharded pattern (model-00001-of-NNNNN.safetensors)
+        let hasSafetensors = fileManager.fileExists(atPath: modelDir.appendingPathComponent("model.safetensors").path)
+        let hasShardedIndex = fileManager.fileExists(atPath: modelDir.appendingPathComponent("model.safetensors.index.json").path)
+
+        let result = hasSafetensors || hasShardedIndex
+        log("isDownloaded(\(modelId)): \(result)")
+        return result
     }
 
     func getModelDirectory(modelId: String) -> URL {

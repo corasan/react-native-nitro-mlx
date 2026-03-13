@@ -29,7 +29,6 @@ class HybridLLM: HybridLLMSpec {
     var modelId: String = ""
     var debug: Bool = false
     var systemPrompt: String = "You are a helpful assistant."
-    var additionalContext: LLMMessage = LLMMessage()
 
     private func log(_ message: String) {
         if debug {
@@ -618,12 +617,12 @@ class HybridLLM: HybridLLMSpec {
                 return results
             }
 
-            if !output.isEmpty {
-                self.messageHistory.append(LLMMessage(role: "assistant", content: output))
-            }
-
             if depth == 0 {
                 self.messageHistory.append(LLMMessage(role: "user", content: prompt))
+            }
+
+            if !output.isEmpty {
+                self.messageHistory.append(LLMMessage(role: "assistant", content: output))
             }
 
             for result in allToolResults {

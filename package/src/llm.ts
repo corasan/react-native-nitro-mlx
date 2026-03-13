@@ -11,7 +11,7 @@ export type EventCallback = (event: StreamEvent) => void
 let instance: LLMSpec | null = null
 
 export type Message = {
-  role: 'user' | 'assistant' | 'system'
+  role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
 }
 
@@ -146,8 +146,8 @@ export const LLM = {
       try {
         const event = JSON.parse(eventJson) as StreamEvent
         onEvent(event)
-      } catch {
-        // Silently ignore malformed events
+      } catch (e) {
+        console.warn('[MLX] Failed to parse stream event:', e)
       }
     })
   },

@@ -100,6 +100,8 @@ class AudioCaptureManager {
     audioEngine.inputNode.removeTap(onBus: 0)
     audioEngine.stop()
 
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
     bufferLock.lock()
     let samples = audioBuffer
     audioBuffer.removeAll()

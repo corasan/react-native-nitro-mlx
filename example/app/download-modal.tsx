@@ -31,7 +31,7 @@ export default function DownloadModal() {
     }
 
     downloadModel()
-  }, [])
+  }, [MODEL_ID])
 
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>

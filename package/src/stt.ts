@@ -1,8 +1,5 @@
 import { NitroModules } from 'react-native-nitro-modules'
-import type {
-  STT as STTSpec,
-  STTLoadOptions,
-} from './specs/STT.nitro'
+import type { STTLoadOptions, STT as STTSpec } from './specs/STT.nitro'
 
 let instance: STTSpec | null = null
 
@@ -24,7 +21,7 @@ export const STT = {
 
   transcribeStream(
     audio: ArrayBuffer,
-    onToken: (token: string) => void
+    onToken: (token: string) => void,
   ): Promise<string> {
     return getInstance().transcribeStream(audio, onToken)
   },

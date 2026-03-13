@@ -150,10 +150,7 @@ export interface LLM extends HybridObject<{ ios: 'swift' }> {
     onToolCall?: (toolName: string, args: string) => void,
   ): Promise<string>
 
-  streamWithEvents(
-    prompt: string,
-    onEvent: (eventJson: string) => void,
-  ): Promise<string>
+  streamWithEvents(prompt: string, onEvent: (eventJson: string) => void): Promise<string>
 
   /**
    * Stop the current generation.
