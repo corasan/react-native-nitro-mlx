@@ -1,11 +1,11 @@
-import { DynamicColorIOS } from 'react-native'
 import { NativeTabs } from 'expo-router/unstable-native-tabs'
+import { DynamicColorIOS } from 'react-native'
 
 const adaptiveTintColor =
   process.env.EXPO_OS === 'ios'
     ? DynamicColorIOS({
-    light: '#0f172a',
-    dark: '#f8fafc',
+        light: '#0f172a',
+        dark: '#f8fafc',
       })
     : '#2563eb'
 
@@ -35,10 +35,7 @@ export default function TabsLayout() {
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="stt">
-        <NativeTabs.Trigger.Icon
-          sf={{ default: 'mic', selected: 'mic.fill' }}
-          md="mic"
-        />
+        <NativeTabs.Trigger.Icon sf={{ default: 'mic', selected: 'mic.fill' }} md="mic" />
         <NativeTabs.Trigger.Label>STT</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>

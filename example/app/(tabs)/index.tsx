@@ -618,7 +618,6 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingBottom: 50,
   },
   centered: {
     flex: 1,
