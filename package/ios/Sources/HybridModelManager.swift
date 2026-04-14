@@ -54,12 +54,21 @@ class HybridModelManager: HybridModelManagerSpec {
                 includingPropertiesForKeys: [.isDirectoryKey]
             )
 
-            return contents
+            let modelIds = contents
                 .filter { url in
                     var isDir: ObjCBool = false
                     return fileManager.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
                 }
                 .map { $0.lastPathComponent.replacingOccurrences(of: "_", with: "/") }
+
+            var downloadedModels: [String] = []
+            for modelId in modelIds {
+                if await ModelDownloader.shared.isDownloaded(modelId: modelId) {
+                    downloadedModels.append(modelId)
+                }
+            }
+
+            return downloadedModels
         }
     }
 

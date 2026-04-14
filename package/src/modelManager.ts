@@ -1,11 +1,19 @@
 import { NitroModules } from 'react-native-nitro-modules'
 import type { ModelManager as ModelManagerSpec } from './specs/ModelManager.nitro'
+import {
+  assertBoolean,
+  assertNonEmptyString,
+  validateModelDownloadCallback,
+} from './runtime'
 
 let instance: ModelManagerSpec | null = null
 
 function getInstance(): ModelManagerSpec {
   if (!instance) {
     instance = NitroModules.createHybridObject<ModelManagerSpec>('ModelManager')
+  }
+  if (!instance) {
+    throw new Error('Failed to initialize the ModelManager Nitro module.')
   }
   return instance
 }
@@ -40,7 +48,10 @@ export const ModelManager = {
     modelId: string,
     progressCallback: (progress: number) => void,
   ): Promise<string> {
-    return getInstance().download(modelId, progressCallback)
+    return getInstance().download(
+      assertNonEmptyString(modelId, 'ModelManager modelId'),
+      validateModelDownloadCallback(progressCallback) ?? (() => {}),
+    )
   },
 
   /**
@@ -49,7 +60,7 @@ export const ModelManager = {
    * @returns True if the model is fully downloaded
    */
   isDownloaded(modelId: string): Promise<boolean> {
-    return getInstance().isDownloaded(modelId)
+    return getInstance().isDownloaded(assertNonEmptyString(modelId, 'ModelManager modelId'))
   },
 
   /**
@@ -65,7 +76,7 @@ export const ModelManager = {
    * @param modelId - HuggingFace model ID
    */
   deleteModel(modelId: string): Promise<void> {
-    return getInstance().deleteModel(modelId)
+    return getInstance().deleteModel(assertNonEmptyString(modelId, 'ModelManager modelId'))
   },
 
   /**
@@ -74,7 +85,7 @@ export const ModelManager = {
    * @returns Absolute path to the model directory
    */
   getModelPath(modelId: string): Promise<string> {
-    return getInstance().getModelPath(modelId)
+    return getInstance().getModelPath(assertNonEmptyString(modelId, 'ModelManager modelId'))
   },
 
   /** Enable debug logging to console */
@@ -83,6 +94,6 @@ export const ModelManager = {
   },
 
   set debug(value: boolean) {
-    getInstance().debug = value
+    getInstance().debug = assertBoolean(value, 'ModelManager.debug')
   },
 }

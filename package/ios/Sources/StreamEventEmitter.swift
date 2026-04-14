@@ -74,6 +74,7 @@ struct StreamEventEmitter {
         let tokensPerSecond: Double
         let timeToFirstToken: Double
         let totalTime: Double
+        let toolExecutionTime: Double
     }
 
     struct GenerationEndEvent: Encodable {
@@ -125,7 +126,8 @@ struct StreamEventEmitter {
                 tokenCount: stats.tokenCount,
                 tokensPerSecond: stats.tokensPerSecond,
                 timeToFirstToken: stats.timeToFirstToken,
-                totalTime: stats.totalTime
+                totalTime: stats.totalTime,
+                toolExecutionTime: stats.toolExecutionTime
             )
         ))
     }

@@ -4,6 +4,12 @@ import type {
   TTSLoadOptions,
   TTSGenerateOptions,
 } from './specs/TTS.nitro'
+import {
+  assertNonEmptyString,
+  createSafeCallback,
+  validateTTSGenerateOptions,
+  validateTTSLoadOptions,
+} from './runtime'
 
 let instance: TTSSpec | null = null
 
@@ -11,19 +17,28 @@ function getInstance(): TTSSpec {
   if (!instance) {
     instance = NitroModules.createHybridObject<TTSSpec>('TTS')
   }
+  if (!instance) {
+    throw new Error('Failed to initialize the TTS Nitro module.')
+  }
   return instance
 }
 
 export const TTS = {
   load(modelId: string, options?: TTSLoadOptions): Promise<void> {
-    return getInstance().load(modelId, options)
+    return getInstance().load(
+      assertNonEmptyString(modelId, 'TTS modelId'),
+      validateTTSLoadOptions(options),
+    )
   },
 
   generate(
     text: string,
     options?: TTSGenerateOptions
   ): Promise<ArrayBuffer> {
-    return getInstance().generate(text, options)
+    return getInstance().generate(
+      assertNonEmptyString(text, 'TTS text'),
+      validateTTSGenerateOptions(options),
+    )
   },
 
   stream(
@@ -31,7 +46,11 @@ export const TTS = {
     onAudioChunk: (audio: ArrayBuffer) => void,
     options?: TTSGenerateOptions
   ): Promise<void> {
-    return getInstance().stream(text, onAudioChunk, options)
+    return getInstance().stream(
+      assertNonEmptyString(text, 'TTS text'),
+      createSafeCallback('TTS.stream onAudioChunk', onAudioChunk) ?? (() => {}),
+      validateTTSGenerateOptions(options),
+    )
   },
 
   stop(): void {

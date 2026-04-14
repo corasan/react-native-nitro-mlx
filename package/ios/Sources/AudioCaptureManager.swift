@@ -99,6 +99,7 @@ class AudioCaptureManager {
   func stopCapturing() -> MLXArray {
     audioEngine.inputNode.removeTap(onBus: 0)
     audioEngine.stop()
+    try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
 
     bufferLock.lock()
     let samples = audioBuffer
