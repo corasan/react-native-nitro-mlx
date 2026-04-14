@@ -4,6 +4,7 @@ enum ModelDownloadError: LocalizedError {
     case invalidModelMetadata(String)
     case invalidResponse(statusCode: Int, file: String?)
     case noDownloadableFiles(String)
+    case manifestMissing(String)
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +17,8 @@ enum ModelDownloadError: LocalizedError {
             return "Model request failed with HTTP status \(statusCode)."
         case .noDownloadableFiles(let modelId):
             return "No downloadable files were found for model '\(modelId)'."
+        case .manifestMissing(let modelId):
+            return "No download manifest was found for model '\(modelId)'."
         }
     }
 }
@@ -227,6 +230,22 @@ actor ModelDownloader: NSObject {
 
         log("isDownloaded(\(modelId)): \(isComplete)")
         return isComplete
+    }
+
+    func getDownloadManifestContents(modelId: String) throws -> String {
+        let modelDir = getModelDirectory(modelId: modelId)
+        let manifestURL = manifestURL(for: modelDir)
+
+        guard fileManager.fileExists(atPath: manifestURL.path) else {
+            throw ModelDownloadError.manifestMissing(modelId)
+        }
+
+        let data = try Data(contentsOf: manifestURL)
+        guard let contents = String(data: data, encoding: .utf8) else {
+            throw ModelDownloadError.invalidModelMetadata(modelId)
+        }
+
+        return contents
     }
 
     func getModelDirectory(modelId: String) -> URL {

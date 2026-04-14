@@ -88,6 +88,16 @@ export const ModelManager = {
     return getInstance().getModelPath(assertNonEmptyString(modelId, 'ModelManager modelId'))
   },
 
+  /**
+   * Read the raw download manifest JSON for a downloaded model.
+   * Throws if the model has no `.download-manifest.json`.
+   */
+  getDownloadManifest(modelId: string): Promise<string> {
+    return getInstance().getDownloadManifest(
+      assertNonEmptyString(modelId, 'ModelManager modelId'),
+    )
+  },
+
   /** Enable debug logging to console */
   get debug(): boolean {
     return getInstance().debug

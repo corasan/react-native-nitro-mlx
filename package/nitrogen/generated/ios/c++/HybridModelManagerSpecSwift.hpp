@@ -108,6 +108,14 @@ namespace margelo::nitro::mlxreactnative {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<std::string>> getDownloadManifest(const std::string& modelId) override {
+      auto __result = _swiftPart.getDownloadManifest(modelId);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
 
   private:
     MLXReactNative::HybridModelManagerSpec_cxx _swiftPart;

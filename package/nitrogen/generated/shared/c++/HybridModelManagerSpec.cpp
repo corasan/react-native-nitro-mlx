@@ -21,6 +21,7 @@ namespace margelo::nitro::mlxreactnative {
       prototype.registerHybridMethod("getDownloadedModels", &HybridModelManagerSpec::getDownloadedModels);
       prototype.registerHybridMethod("deleteModel", &HybridModelManagerSpec::deleteModel);
       prototype.registerHybridMethod("getModelPath", &HybridModelManagerSpec::getModelPath);
+      prototype.registerHybridMethod("getDownloadManifest", &HybridModelManagerSpec::getDownloadManifest);
     });
   }
 

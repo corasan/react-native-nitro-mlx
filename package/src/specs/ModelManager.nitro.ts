@@ -39,6 +39,15 @@ export interface ModelManager extends HybridObject<{ ios: 'swift' }> {
    */
   getModelPath(modelId: string): Promise<string>
 
+  /**
+   * Read the download manifest for a downloaded model.
+   * Useful for verifying on-device that a fresh download completed and wrote
+   * `.download-manifest.json` into the model directory.
+   * @param modelId - HuggingFace model ID
+   * @returns The raw manifest JSON contents
+   */
+  getDownloadManifest(modelId: string): Promise<string>
+
   /** Enable debug logging */
   debug: boolean
 }

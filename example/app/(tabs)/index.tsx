@@ -109,6 +109,17 @@ type Message = {
   isUser: boolean
 }
 
+type DownloadManifest = {
+  modelId?: string
+  files?: string[]
+  completedAt?: string
+}
+
+type ManifestDebugState = {
+  status: 'idle' | 'checking' | 'present' | 'missing' | 'error'
+  summary: string
+}
+
 const ToolCallBlock = ({ toolCall }: { toolCall: ToolCallBlockData }) => {
   const [expanded, setExpanded] = useState(false)
   const colorScheme = useColorScheme()
@@ -235,6 +246,10 @@ export default function ChatScreen() {
   const textColor = colorScheme === 'dark' ? 'white' : 'black'
   const bgColor = colorScheme === 'dark' ? 'black' : 'white'
   const [messages, setMessages] = useState<Message[]>([])
+  const [manifestState, setManifestState] = useState<ManifestDebugState>({
+    status: 'idle',
+    summary: 'Not checked yet',
+  })
   const listRef = useRef<LegendListRef>(null)
   const inputRef = useRef<TextInput>(null)
   const isLoadingRef = useRef(false)
@@ -251,10 +266,50 @@ export default function ChatScreen() {
     try {
       const downloaded = await ModelManager.isDownloaded(MODEL_ID)
       setIsDownloaded(downloaded)
+      if (!downloaded) {
+        setManifestState({
+          status: 'idle',
+          summary: 'Download the model to create a manifest',
+        })
+      }
     } catch (error) {
       console.error('Error checking download:', error)
     } finally {
       setIsChecking(false)
+    }
+  }, [])
+
+  const refreshManifest = useCallback(async () => {
+    setManifestState({
+      status: 'checking',
+      summary: 'Reading .download-manifest.json...',
+    })
+
+    try {
+      const rawManifest = await ModelManager.getDownloadManifest(MODEL_ID)
+      const manifest = JSON.parse(rawManifest) as DownloadManifest
+      const fileCount = manifest.files?.length ?? 0
+      const completedLabel = manifest.completedAt
+        ? new Date(manifest.completedAt).toLocaleString()
+        : 'unknown completion time'
+
+      setManifestState({
+        status: 'present',
+        summary: `${fileCount} files · completed ${completedLabel}`,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (message.includes('No download manifest')) {
+        setManifestState({
+          status: 'missing',
+          summary: 'No manifest found for this cached model',
+        })
+      } else {
+        setManifestState({
+          status: 'error',
+          summary: message,
+        })
+      }
     }
   }, [])
 
@@ -285,6 +340,7 @@ export default function ChatScreen() {
           tools: [weatherTool],
         })
         setIsReady(true)
+        await refreshManifest()
       } catch (error) {
         console.error('Error loading model:', error)
       } finally {
@@ -436,6 +492,10 @@ export default function ChatScreen() {
       setIsDownloaded(false)
       setIsReady(false)
       setMessages([])
+      setManifestState({
+        status: 'idle',
+        summary: 'Manifest deleted with model',
+      })
       isLoadingRef.current = false
     } catch (error) {
       console.error('Error deleting model:', error)
@@ -567,6 +627,9 @@ export default function ChatScreen() {
             <TouchableOpacity style={styles.historyButton} onPress={logHistory}>
               <Text style={styles.historyButtonText}>Log</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.manifestButton} onPress={refreshManifest}>
+              <Text style={styles.manifestButtonText}>Manifest</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.clearButton} onPress={handleClearHistory}>
               <Text style={styles.clearButtonText}>Clear</Text>
             </TouchableOpacity>
@@ -574,6 +637,23 @@ export default function ChatScreen() {
               <Text style={styles.deleteButtonText}>Delete</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        <View
+          style={[
+            styles.manifestPanel,
+            {
+              backgroundColor: colorScheme === 'dark' ? '#0f172a' : '#eef4ff',
+              borderBottomColor: colorScheme === 'dark' ? '#1e293b' : '#dbe7ff',
+            },
+          ]}
+        >
+          <Text selectable style={[styles.manifestTitle, { color: textColor }]}>
+            Download Manifest
+          </Text>
+          <Text selectable style={[styles.manifestSummary, { color: textColor }]}>
+            {manifestState.summary}
+          </Text>
         </View>
 
         <LegendList<Message>
@@ -655,6 +735,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  manifestButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#007AFF',
+  },
+  manifestButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   clearButton: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -731,6 +822,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     gap: 8,
+  },
+  manifestPanel: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    gap: 4,
+  },
+  manifestTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  manifestSummary: {
+    fontSize: 12,
+    opacity: 0.8,
   },
   input: {
     flex: 1,

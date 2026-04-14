@@ -19,6 +19,7 @@ public protocol HybridModelManagerSpec_protocol: HybridObject {
   func getDownloadedModels() throws -> Promise<[String]>
   func deleteModel(modelId: String) throws -> Promise<Void>
   func getModelPath(modelId: String) throws -> Promise<String>
+  func getDownloadManifest(modelId: String) throws -> Promise<String>
 }
 
 public extension HybridModelManagerSpec_protocol {

@@ -83,4 +83,10 @@ class HybridModelManager: HybridModelManagerSpec {
             return await ModelDownloader.shared.getModelDirectory(modelId: modelId).path
         }
     }
+
+    func getDownloadManifest(modelId: String) throws -> Promise<String> {
+        return Promise.async {
+            try await ModelDownloader.shared.getDownloadManifestContents(modelId: modelId)
+        }
+    }
 }
