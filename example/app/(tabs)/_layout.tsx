@@ -1,21 +1,42 @@
-import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs'
+import { NativeTabs } from 'expo-router/unstable-native-tabs'
+import { DynamicColorIOS } from 'react-native'
+
+const adaptiveTintColor =
+  process.env.EXPO_OS === 'ios'
+    ? DynamicColorIOS({
+        light: '#0f172a',
+        dark: '#f8fafc',
+      })
+    : '#2563eb'
 
 export default function TabsLayout() {
   return (
-    <NativeTabs>
+    <NativeTabs
+      minimizeBehavior="onScrollDown"
+      tintColor={adaptiveTintColor}
+      labelStyle={{
+        color: adaptiveTintColor,
+      }}
+    >
       <NativeTabs.Trigger name="index">
-        <Label>Home</Label>
-        <Icon sf="house.fill" />
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'house', selected: 'house.fill' }}
+          md="home"
+        />
+        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="tts">
-        <Label>TTS</Label>
-        <Icon sf="speaker.1.fill" />
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'speaker', selected: 'speaker.wave.2.fill' }}
+          md="record_voice_over"
+        />
+        <NativeTabs.Trigger.Label>TTS</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="stt">
-        <Label>STT</Label>
-        <Icon sf="mic.fill" />
+        <NativeTabs.Trigger.Icon sf={{ default: 'mic', selected: 'mic.fill' }} md="mic" />
+        <NativeTabs.Trigger.Label>STT</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   )

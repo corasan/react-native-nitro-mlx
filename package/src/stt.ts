@@ -3,6 +3,12 @@ import type {
   STT as STTSpec,
   STTLoadOptions,
 } from './specs/STT.nitro'
+import {
+  assertArrayBuffer,
+  assertNonEmptyString,
+  createSafeCallback,
+  validateSTTLoadOptions,
+} from './runtime'
 
 let instance: STTSpec | null = null
 
@@ -10,23 +16,32 @@ function getInstance(): STTSpec {
   if (!instance) {
     instance = NitroModules.createHybridObject<STTSpec>('STT')
   }
+  if (!instance) {
+    throw new Error('Failed to initialize the STT Nitro module.')
+  }
   return instance
 }
 
 export const STT = {
   load(modelId: string, options?: STTLoadOptions): Promise<void> {
-    return getInstance().load(modelId, options)
+    return getInstance().load(
+      assertNonEmptyString(modelId, 'STT modelId'),
+      validateSTTLoadOptions(options),
+    )
   },
 
   transcribe(audio: ArrayBuffer): Promise<string> {
-    return getInstance().transcribe(audio)
+    return getInstance().transcribe(assertArrayBuffer(audio, 'STT audio'))
   },
 
   transcribeStream(
     audio: ArrayBuffer,
     onToken: (token: string) => void
   ): Promise<string> {
-    return getInstance().transcribeStream(audio, onToken)
+    return getInstance().transcribeStream(
+      assertArrayBuffer(audio, 'STT audio'),
+      createSafeCallback('STT.transcribeStream onToken', onToken) ?? (() => {}),
+    )
   },
 
   startListening(): Promise<void> {

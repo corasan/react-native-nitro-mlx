@@ -57,6 +57,7 @@ namespace margelo::nitro::mlxreactnative {
       virtual std::shared_ptr<Promise<std::vector<std::string>>> getDownloadedModels() = 0;
       virtual std::shared_ptr<Promise<void>> deleteModel(const std::string& modelId) = 0;
       virtual std::shared_ptr<Promise<std::string>> getModelPath(const std::string& modelId) = 0;
+      virtual std::shared_ptr<Promise<std::string>> getDownloadManifest(const std::string& modelId) = 0;
 
     protected:
       // Hybrid Setup

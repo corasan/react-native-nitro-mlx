@@ -18,6 +18,7 @@ class HybridLLM: HybridLLMSpec {
     )
     private var modelFactory: ModelFactory = LLMModelFactory.shared
     private var manageHistory: Bool = false
+    private var seedMessages: [LLMMessage] = []
     private var messageHistory: [LLMMessage] = []
     private var loadTask: Task<Void, Error>?
 
@@ -107,11 +108,23 @@ class HybridLLM: HybridLLMSpec {
                 self.container = nil
                 self.tools = []
                 self.toolSchemas = []
+                self.seedMessages = []
+                self.messageHistory = []
+                self.manageHistory = false
+                self.modelId = ""
                 Memory.clearCache()
 
                 let memoryAfterCleanup = self.getMemoryUsage()
                 let gpuAfterCleanup = self.getGPUMemoryUsage()
                 log("After cleanup - Host: \(memoryAfterCleanup), GPU: \(gpuAfterCleanup)")
+
+                if !(await ModelDownloader.shared.isDownloaded(modelId: modelId)) {
+                    log("Model not cached, downloading before load: \(modelId)")
+                    _ = try await ModelDownloader.shared.download(
+                        modelId: modelId,
+                        progressCallback: { _ in }
+                    )
+                }
 
                 let modelDir = await ModelDownloader.shared.getModelDirectory(modelId: modelId)
                 log("Loading from directory: \(modelDir.path)")
@@ -135,8 +148,9 @@ class HybridLLM: HybridLLMSpec {
                     log("Loaded \(self.tools.count) tools: \(self.tools.map { $0.name })")
                 }
 
-                let additionalContextDict: [String: Any]? = if let messages = options?.additionalContext {
-                    ["messages": messages.map { ["role": $0.role, "content": $0.content] }]
+                let seedMessages = options?.additionalContext ?? []
+                let additionalContextDict: [String: Any]? = if !seedMessages.isEmpty {
+                    ["messages": seedMessages.map { ["role": $0.role, "content": $0.content] }]
                 } else {
                     nil
                 }
@@ -146,10 +160,11 @@ class HybridLLM: HybridLLMSpec {
                 self.modelId = modelId
 
                 self.manageHistory = options?.manageHistory ?? false
-                self.messageHistory = options?.additionalContext ?? []
+                self.seedMessages = seedMessages
+                self.messageHistory = []
 
                 if self.manageHistory {
-                    log("History management enabled with \(self.messageHistory.count) initial messages")
+                    log("History management enabled with \(self.seedMessages.count) seed messages")
                 }
             }
 
@@ -164,10 +179,6 @@ class HybridLLM: HybridLLMSpec {
         }
 
         return Promise.async { [self] in
-            if self.manageHistory {
-                self.messageHistory.append(LLMMessage(role: "user", content: prompt))
-            }
-
             let task = Task<String, Error> {
                 log("Generating response for: \(prompt.prefix(50))...")
                 let result = try await session.respond(to: prompt)
@@ -180,9 +191,7 @@ class HybridLLM: HybridLLMSpec {
 
             let result = try await task.value
 
-            if self.manageHistory {
-                self.messageHistory.append(LLMMessage(role: "assistant", content: result))
-            }
+            self.recordManagedTurn(userPrompt: prompt, assistantResponse: result)
 
             return result
         }
@@ -200,10 +209,6 @@ class HybridLLM: HybridLLMSpec {
         }
 
         return Promise.async { [self] in
-            if self.manageHistory {
-                self.messageHistory.append(LLMMessage(role: "user", content: prompt))
-            }
-
             let task = Task<String, Error> {
                 let startTime = Date()
                 var firstTokenTime: Date?
@@ -211,8 +216,7 @@ class HybridLLM: HybridLLMSpec {
 
                 let result = try await self.performGeneration(
                     container: container,
-                    prompt: prompt,
-                    toolResults: nil,
+                    conversationHistory: self.baseConversationHistory(appendingUserPrompt: prompt),
                     depth: 0,
                     onToken: { token in
                         if firstTokenTime == nil {
@@ -246,9 +250,7 @@ class HybridLLM: HybridLLMSpec {
 
             let result = try await task.value
 
-            if self.manageHistory {
-                self.messageHistory.append(LLMMessage(role: "assistant", content: result))
-            }
+            self.recordManagedTurn(userPrompt: prompt, assistantResponse: result)
 
             return result
         }
@@ -263,10 +265,6 @@ class HybridLLM: HybridLLMSpec {
         }
 
         return Promise.async { [self] in
-            if self.manageHistory {
-                self.messageHistory.append(LLMMessage(role: "user", content: prompt))
-            }
-
             let task = Task<String, Error> {
                 let startTime = Date()
                 var firstTokenTime: Date?
@@ -280,8 +278,7 @@ class HybridLLM: HybridLLMSpec {
 
                 let result = try await self.performGenerationWithEvents(
                     container: container,
-                    prompt: prompt,
-                    toolResults: nil,
+                    conversationHistory: self.baseConversationHistory(appendingUserPrompt: prompt),
                     depth: 0,
                     emitter: emitter,
                     onTokenProcessed: {
@@ -322,42 +319,48 @@ class HybridLLM: HybridLLMSpec {
 
             let result = try await task.value
 
-            if self.manageHistory {
-                self.messageHistory.append(LLMMessage(role: "assistant", content: result))
-            }
+            self.recordManagedTurn(userPrompt: prompt, assistantResponse: result)
 
             return result
         }
     }
 
-    private func buildChatMessages(
-        prompt: String,
-        toolResults: [String]?,
-        depth: Int
-    ) -> [Chat.Message] {
+    private func baseConversationHistory(appendingUserPrompt prompt: String? = nil) -> [LLMMessage] {
+        var history = seedMessages
+        if manageHistory {
+            history.append(contentsOf: messageHistory)
+        }
+        if let prompt {
+            history.append(LLMMessage(role: "user", content: prompt))
+        }
+        return history
+    }
+
+    private func recordManagedTurn(userPrompt: String, assistantResponse: String) {
+        guard manageHistory else {
+            return
+        }
+
+        messageHistory.append(LLMMessage(role: "user", content: userPrompt))
+        if !assistantResponse.isEmpty {
+            messageHistory.append(LLMMessage(role: "assistant", content: assistantResponse))
+        }
+    }
+
+    private func buildChatMessages(from history: [LLMMessage]) -> [Chat.Message] {
         var chat: [Chat.Message] = []
 
         if !self.systemPrompt.isEmpty {
             chat.append(.system(self.systemPrompt))
         }
 
-        for msg in self.messageHistory {
+        for msg in history {
             switch msg.role {
             case "user": chat.append(.user(msg.content))
             case "assistant": chat.append(.assistant(msg.content))
             case "system": chat.append(.system(msg.content))
             case "tool": chat.append(.tool(msg.content))
             default: break
-            }
-        }
-
-        if depth == 0 {
-            chat.append(.user(prompt))
-        }
-
-        if let toolResults {
-            for result in toolResults {
-                chat.append(.tool(result))
             }
         }
 
@@ -378,8 +381,7 @@ class HybridLLM: HybridLLMSpec {
 
     private func performGenerationWithEvents(
         container: ModelContainer,
-        prompt: String,
-        toolResults: [String]?,
+        conversationHistory: [LLMMessage],
         depth: Int,
         emitter: StreamEventEmitter,
         onTokenProcessed: @escaping () -> Void,
@@ -395,7 +397,7 @@ class HybridLLM: HybridLLMSpec {
         var thinkingMachine = ThinkingStateMachine()
         var pendingToolCalls: [(id: String, tool: ToolDefinition, args: [String: Any], argsJson: String)] = []
 
-        let chat = buildChatMessages(prompt: prompt, toolResults: toolResults, depth: depth)
+        let chat = buildChatMessages(from: conversationHistory)
         let userInput = UserInput(
             chat: chat,
             tools: !self.toolSchemas.isEmpty ? self.toolSchemas : nil
@@ -509,18 +511,17 @@ class HybridLLM: HybridLLMSpec {
 
             toolExecutionTime += Date().timeIntervalSince(toolStartTime) * 1000
 
+            var nextConversationHistory = conversationHistory
             if !output.isEmpty {
-                self.messageHistory.append(LLMMessage(role: "assistant", content: output))
+                nextConversationHistory.append(LLMMessage(role: "assistant", content: output))
             }
-
             for result in allToolResults {
-                self.messageHistory.append(LLMMessage(role: "tool", content: result))
+                nextConversationHistory.append(LLMMessage(role: "tool", content: result))
             }
 
             let continuation = try await self.performGenerationWithEvents(
                 container: container,
-                prompt: prompt,
-                toolResults: allToolResults,
+                conversationHistory: nextConversationHistory,
                 depth: depth + 1,
                 emitter: emitter,
                 onTokenProcessed: onTokenProcessed,
@@ -536,8 +537,7 @@ class HybridLLM: HybridLLMSpec {
 
     private func performGeneration(
         container: ModelContainer,
-        prompt: String,
-        toolResults: [String]?,
+        conversationHistory: [LLMMessage],
         depth: Int,
         onToken: @escaping (String) -> Void,
         onToolCall: @escaping (String, String) -> Void
@@ -550,7 +550,7 @@ class HybridLLM: HybridLLMSpec {
         var output = ""
         var pendingToolCalls: [(tool: ToolDefinition, args: [String: Any], argsJson: String)] = []
 
-        let chat = buildChatMessages(prompt: prompt, toolResults: toolResults, depth: depth)
+        let chat = buildChatMessages(from: conversationHistory)
         let userInput = UserInput(
             chat: chat,
             tools: !self.toolSchemas.isEmpty ? self.toolSchemas : nil
@@ -618,24 +618,19 @@ class HybridLLM: HybridLLMSpec {
                 return results
             }
 
+            var nextConversationHistory = conversationHistory
             if !output.isEmpty {
-                self.messageHistory.append(LLMMessage(role: "assistant", content: output))
+                nextConversationHistory.append(LLMMessage(role: "assistant", content: output))
             }
-
-            if depth == 0 {
-                self.messageHistory.append(LLMMessage(role: "user", content: prompt))
-            }
-
             for result in allToolResults {
-                self.messageHistory.append(LLMMessage(role: "tool", content: result))
+                nextConversationHistory.append(LLMMessage(role: "tool", content: result))
             }
 
             onToken("\u{200B}")
 
             let continuation = try await self.performGeneration(
                 container: container,
-                prompt: prompt,
-                toolResults: allToolResults,
+                conversationHistory: nextConversationHistory,
                 depth: depth + 1,
                 onToken: onToken,
                 onToolCall: onToolCall
@@ -723,7 +718,7 @@ class HybridLLM: HybridLLMSpec {
     }
 
     func getHistory() throws -> [LLMMessage] {
-        return messageHistory
+        return baseConversationHistory()
     }
 
     func clearHistory() throws {

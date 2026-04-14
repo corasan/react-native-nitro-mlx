@@ -5,6 +5,13 @@ import type {
   LLM as LLMSpec,
   StreamEvent,
 } from './specs/LLM.nitro'
+import {
+  assertBoolean,
+  assertNonEmptyString,
+  createSafeCallback,
+  safeJsonParse,
+  validateLLMLoadOptions,
+} from './runtime'
 
 export type EventCallback = (event: StreamEvent) => void
 
@@ -28,6 +35,9 @@ export type ToolCallUpdate = {
 function getInstance(): LLMSpec {
   if (!instance) {
     instance = NitroModules.createHybridObject<LLMSpec>('LLM')
+  }
+  if (!instance) {
+    throw new Error('Failed to initialize the LLM Nitro module.')
   }
   return instance
 }
@@ -60,8 +70,11 @@ export const LLM = {
    * @param modelId - HuggingFace model ID (e.g., 'mlx-community/Qwen3-0.6B-4bit')
    * @param options - Callback invoked with loading progress (0-1)
    */
-  load(modelId: string, options: LLMLoadOptions): Promise<void> {
-    return getInstance().load(modelId, options)
+  load(modelId: string, options?: LLMLoadOptions): Promise<void> {
+    return getInstance().load(
+      assertNonEmptyString(modelId, 'LLM modelId'),
+      validateLLMLoadOptions(options),
+    )
   },
 
   /**
@@ -71,7 +84,7 @@ export const LLM = {
    * @returns The complete generated text
    */
   generate(prompt: string): Promise<string> {
-    return getInstance().generate(prompt)
+    return getInstance().generate(assertNonEmptyString(prompt, 'LLM prompt'))
   },
 
   /**
@@ -90,27 +103,26 @@ export const LLM = {
     onToolCall?: (update: ToolCallUpdate) => void,
   ): Promise<string> {
     const accumulatedToolCalls: ToolCallInfo[] = []
+    const safeOnToken = createSafeCallback('LLM.stream onToken', onToken)
+    const safeOnToolCall = createSafeCallback('LLM.stream onToolCall', onToolCall)
 
-    return getInstance().stream(prompt, onToken, (name: string, argsJson: string) => {
-      if (onToolCall) {
-        try {
-          const args = JSON.parse(argsJson) as Record<string, unknown>
-          const toolCall = { name, arguments: args }
-          accumulatedToolCalls.push(toolCall)
-          onToolCall({
-            toolCall,
-            allToolCalls: [...accumulatedToolCalls],
-          })
-        } catch {
-          const toolCall = { name, arguments: {} }
-          accumulatedToolCalls.push(toolCall)
-          onToolCall({
-            toolCall,
-            allToolCalls: [...accumulatedToolCalls],
-          })
-        }
-      }
-    })
+    return getInstance().stream(
+      assertNonEmptyString(prompt, 'LLM prompt'),
+      safeOnToken ?? (() => {}),
+      safeOnToolCall
+        ? (name: string, argsJson: string) => {
+            const toolCall = {
+              name,
+              arguments: safeJsonParse<Record<string, unknown>>(argsJson, {}),
+            }
+            accumulatedToolCalls.push(toolCall)
+            safeOnToolCall({
+              toolCall,
+              allToolCalls: [...accumulatedToolCalls],
+            })
+          }
+        : undefined,
+    )
   },
 
   /**
@@ -142,14 +154,17 @@ export const LLM = {
    * ```
    */
   streamWithEvents(prompt: string, onEvent: EventCallback): Promise<string> {
-    return getInstance().streamWithEvents(prompt, (eventJson: string) => {
-      try {
-        const event = JSON.parse(eventJson) as StreamEvent
-        onEvent(event)
-      } catch {
-        // Silently ignore malformed events
-      }
-    })
+    const safeOnEvent = createSafeCallback('LLM.streamWithEvents onEvent', onEvent)
+
+    return getInstance().streamWithEvents(
+      assertNonEmptyString(prompt, 'LLM prompt'),
+      (eventJson: string) => {
+        const event = safeJsonParse<StreamEvent | null>(eventJson, null)
+        if (event) {
+          safeOnEvent?.(event)
+        }
+      },
+    )
   },
 
   /**
@@ -211,7 +226,7 @@ export const LLM = {
   },
 
   set debug(value: boolean) {
-    getInstance().debug = value
+    getInstance().debug = assertBoolean(value, 'LLM.debug')
   },
 
   /**
@@ -224,6 +239,6 @@ export const LLM = {
   },
 
   set systemPrompt(value: string) {
-    getInstance().systemPrompt = value
+    getInstance().systemPrompt = assertNonEmptyString(value, 'LLM systemPrompt')
   },
 }

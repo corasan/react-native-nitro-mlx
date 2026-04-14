@@ -10,6 +10,7 @@
   "scripts": {
     "build": "rm -rf lib && bun typecheck && bob build",
     "typecheck": "tsc --noEmit",
+    "test": "bun test src/runtime.test.ts",
     "clean": "rm -rf android/build node_modules/**/android/build lib android/.cxx node_modules/**/android/.cxx",
     "release": "release-it",
     "specs": "bun typecheck && nitrogen --logLevel=\\\"debug\\\" && bun run build",
