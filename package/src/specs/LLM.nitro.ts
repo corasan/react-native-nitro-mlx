@@ -85,6 +85,45 @@ export interface LLMMessage {
 }
 
 /**
+ * Controls low-level token generation behavior.
+ */
+export interface LLMGenerationConfig {
+  /** Maximum number of tokens to generate */
+  maxTokens?: number
+  /** Sliding-window KV cache size. When set, old cache entries are rotated out */
+  maxKVSize?: number
+  /** KV cache quantization bits. Use 4 or 8 to reduce cache memory usage */
+  kvBits?: number
+  /** KV cache quantization group size */
+  kvGroupSize?: number
+  /** Token index at which KV cache quantization begins */
+  quantizedKVStart?: number
+  /** Sampling temperature. Set to 0 for greedy decoding */
+  temperature?: number
+  /** Top-p / nucleus sampling threshold */
+  topP?: number
+  /** Penalty applied to recently repeated tokens */
+  repetitionPenalty?: number
+  /** Number of recent tokens considered for repetition penalty */
+  repetitionContextSize?: number
+  /** Prompt prefill chunk size used for long-context batching */
+  prefillStepSize?: number
+}
+
+/**
+ * Controls history trimming when managed chat history is enabled.
+ */
+export interface LLMContextConfig {
+  /**
+   * Maximum prompt token count to preserve when rebuilding managed history.
+   * Additional context passed during `load()` is treated as pinned and preserved.
+   */
+  maxContextTokens?: number
+  /** Number of most-recent history messages to preserve during trimming */
+  keepLastMessages?: number
+}
+
+/**
  * Parameter definition for a tool.
  */
 export interface ToolParameter {
@@ -115,6 +154,12 @@ export interface LLMLoadOptions {
   manageHistory?: boolean
   /** Tools available for the model to call */
   tools?: ToolDefinition[]
+  /** Default generation parameters applied to future requests */
+  generationConfig?: LLMGenerationConfig
+  /** Number of generated chunks to batch before crossing the JS bridge */
+  tokenBatchSize?: number
+  /** Context trimming behavior for managed chat history */
+  contextConfig?: LLMContextConfig
 }
 
 /**

@@ -6,6 +6,39 @@ internal import MLXLMCommon
 internal import Tokenizers
 
 class HybridLLM: HybridLLMSpec {
+    private final class TokenBatcher {
+        private let batchSize: Int
+        private let emit: (String) -> Void
+        private var pending: [String] = []
+
+        init(batchSize: Int, emit: @escaping (String) -> Void) {
+            self.batchSize = max(1, batchSize)
+            self.emit = emit
+        }
+
+        func append(_ chunk: String) {
+            guard !chunk.isEmpty else { return }
+
+            pending.append(chunk)
+            if pending.count >= batchSize {
+                flush()
+            }
+        }
+
+        func flush() {
+            guard !pending.isEmpty else { return }
+            emit(pending.joined())
+            pending.removeAll(keepingCapacity: true)
+        }
+    }
+
+    private struct ManagedSessionResult {
+        let output: String
+        let generationTokenCount: Int
+        let generationTimeMs: Double
+        let firstTokenTime: Date?
+    }
+
     private var session: ChatSession?
     private var currentTask: Task<String, Error>?
     private var container: ModelContainer?
@@ -24,13 +57,22 @@ class HybridLLM: HybridLLMSpec {
 
     private var tools: [ToolDefinition] = []
     private var toolSchemas: [ToolSpec] = []
+    private var generationParameters: GenerateParameters = GenerateParameters()
+    private var tokenBatchSize: Int = 1
+    private var contextConfig: LLMContextConfig?
 
-    var isLoaded: Bool { session != nil }
+    var isLoaded: Bool { container != nil }
     var isGenerating: Bool { currentTask != nil }
     var modelId: String = ""
     var debug: Bool = false
     var systemPrompt: String = "You are a helpful assistant."
-    var additionalContext: LLMMessage = LLMMessage()
+
+    private let maxToolCallDepth = 10
+    private let defaultKeepLastMessages = 4
+
+    private var canUseManagedSession: Bool {
+        manageHistory && toolSchemas.isEmpty && container != nil
+    }
 
     private func log(_ message: String) {
         if debug {
@@ -40,13 +82,15 @@ class HybridLLM: HybridLLMSpec {
 
     private func getMemoryUsage() -> String {
         var taskInfo = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
         let result: kern_return_t = withUnsafeMutablePointer(to: &taskInfo) {
             $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                task_info(mach_task_self_,
-                         task_flavor_t(MACH_TASK_BASIC_INFO),
-                         $0,
-                         &count)
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(MACH_TASK_BASIC_INFO),
+                    $0,
+                    &count
+                )
             }
         }
 
@@ -63,8 +107,12 @@ class HybridLLM: HybridLLMSpec {
         let allocatedMB = Float(snapshot.activeMemory) / 1024.0 / 1024.0
         let cacheMB = Float(snapshot.cacheMemory) / 1024.0 / 1024.0
         let peakMB = Float(snapshot.peakMemory) / 1024.0 / 1024.0
-        return String(format: "Allocated: %.1f MB, Cache: %.1f MB, Peak: %.1f MB",
-                     allocatedMB, cacheMB, peakMB)
+        return String(
+            format: "Allocated: %.1f MB, Cache: %.1f MB, Peak: %.1f MB",
+            allocatedMB,
+            cacheMB,
+            peakMB
+        )
     }
 
     private func buildToolSchema(from tool: ToolDefinition) -> ToolSpec {
@@ -74,7 +122,7 @@ class HybridLLM: HybridLLMSpec {
         for param in tool.parameters {
             properties[param.name] = [
                 "type": param.type,
-                "description": param.description
+                "description": param.description,
             ]
             if param.required {
                 required.append(param.name)
@@ -89,33 +137,307 @@ class HybridLLM: HybridLLMSpec {
                 "parameters": [
                     "type": "object",
                     "properties": properties,
-                    "required": required
-                ]
-            ]
+                    "required": required,
+                ],
+            ],
         ] as ToolSpec
     }
 
+    private func normalizedInt(_ value: Double?, minimum: Int = 0) -> Int? {
+        guard let value else { return nil }
+        return max(minimum, Int(value))
+    }
+
+    private func buildGenerateParameters(from config: LLMGenerationConfig?) -> GenerateParameters {
+        GenerateParameters(
+            maxTokens: normalizedInt(config?.maxTokens, minimum: 1),
+            maxKVSize: normalizedInt(config?.maxKVSize, minimum: 1),
+            kvBits: normalizedInt(config?.kvBits, minimum: 1),
+            kvGroupSize: normalizedInt(config?.kvGroupSize, minimum: 1) ?? 64,
+            quantizedKVStart: normalizedInt(config?.quantizedKVStart, minimum: 0) ?? 0,
+            temperature: Float(config?.temperature ?? 0.6),
+            topP: Float(config?.topP ?? 1.0),
+            repetitionPenalty: config?.repetitionPenalty.map(Float.init),
+            repetitionContextSize: normalizedInt(config?.repetitionContextSize, minimum: 0) ?? 20,
+            prefillStepSize: normalizedInt(config?.prefillStepSize, minimum: 1) ?? 512
+        )
+    }
+
+    private func configuredToolSchemas() -> [ToolSpec]? {
+        toolSchemas.isEmpty ? nil : toolSchemas
+    }
+
+    private func combinedHistory(with history: [LLMMessage]) -> [LLMMessage] {
+        seedMessages + history
+    }
+
+    private func chatMessages(from history: [LLMMessage]) -> [Chat.Message] {
+        history.compactMap { message in
+            switch message.role {
+            case "user":
+                return .user(message.content)
+            case "assistant":
+                return .assistant(message.content)
+            case "system":
+                return .system(message.content)
+            case "tool":
+                return .tool(message.content)
+            default:
+                return nil
+            }
+        }
+    }
+
+    private func makeUserInput(history: [LLMMessage], prompt: String?) -> UserInput {
+        var chat: [Chat.Message] = []
+
+        if !systemPrompt.isEmpty {
+            chat.append(.system(systemPrompt))
+        }
+
+        chat.append(contentsOf: chatMessages(from: combinedHistory(with: history)))
+
+        if let prompt {
+            chat.append(.user(prompt))
+        }
+
+        return UserInput(chat: chat, tools: configuredToolSchemas())
+    }
+
+    private func rebuildManagedSession() {
+        guard canUseManagedSession, let container else {
+            session = nil
+            return
+        }
+
+        let history = chatMessages(from: combinedHistory(with: messageHistory))
+
+        if history.isEmpty {
+            session = ChatSession(
+                container,
+                instructions: systemPrompt,
+                generateParameters: generationParameters,
+                tools: configuredToolSchemas()
+            )
+        } else {
+            session = ChatSession(
+                container,
+                instructions: systemPrompt,
+                history: history,
+                generateParameters: generationParameters,
+                tools: configuredToolSchemas()
+            )
+        }
+    }
+
+    private func ensureManagedSession() throws -> ChatSession {
+        guard canUseManagedSession else {
+            throw LLMError.notLoaded
+        }
+
+        if session == nil {
+            rebuildManagedSession()
+        }
+
+        guard let session else {
+            throw LLMError.notLoaded
+        }
+
+        return session
+    }
+
+    private func trimManagedHistoryIfNeeded(upcomingPrompt: String? = nil) async throws {
+        guard manageHistory, let container else { return }
+
+        let maxContextTokens = normalizedInt(contextConfig?.maxContextTokens, minimum: 1)
+        guard let maxContextTokens else { return }
+
+        let keepLastMessages = normalizedInt(
+            contextConfig?.keepLastMessages,
+            minimum: 0
+        ) ?? defaultKeepLastMessages
+
+        func tokenCount(for history: [LLMMessage]) async throws -> Int {
+            let input = try await container.prepare(
+                input: makeUserInput(history: history, prompt: upcomingPrompt)
+            )
+            return input.text.tokens.size
+        }
+
+        var trimmedHistory = messageHistory
+        let initialTokenCount = try await tokenCount(for: trimmedHistory)
+
+        guard initialTokenCount > maxContextTokens else { return }
+
+        while trimmedHistory.count > keepLastMessages {
+            trimmedHistory.removeFirst()
+
+            if try await tokenCount(for: trimmedHistory) <= maxContextTokens {
+                break
+            }
+        }
+
+        guard trimmedHistory.count != messageHistory.count else {
+            log(
+                "Context remains above the configured limit (\(maxContextTokens) tokens); pinned and recent messages were preserved"
+            )
+            return
+        }
+
+        let removedCount = messageHistory.count - trimmedHistory.count
+        messageHistory = trimmedHistory
+        log(
+            "Trimmed \(removedCount) message(s) from managed history to stay within \(maxContextTokens) prompt tokens"
+        )
+        rebuildManagedSession()
+
+        if try await tokenCount(for: trimmedHistory) > maxContextTokens {
+            log(
+                "Context still exceeds \(maxContextTokens) tokens after trimming because preserved messages alone are larger than the budget"
+            )
+        }
+    }
+
+    private func finalizeManagedHistory(_ history: [LLMMessage]) async throws {
+        guard manageHistory else { return }
+        messageHistory = history
+        try await trimManagedHistoryIfNeeded()
+        if canUseManagedSession {
+            rebuildManagedSession()
+        }
+    }
+
+    private func buildChatMessages(
+        history: [LLMMessage],
+        prompt: String,
+        toolResults: [String]?,
+        depth: Int
+    ) -> [Chat.Message] {
+        var chat: [Chat.Message] = []
+
+        if !systemPrompt.isEmpty {
+            chat.append(.system(systemPrompt))
+        }
+
+        chat.append(contentsOf: chatMessages(from: combinedHistory(with: history)))
+
+        if depth == 0 {
+            chat.append(.user(prompt))
+        }
+
+        if let toolResults {
+            for result in toolResults {
+                chat.append(.tool(result))
+            }
+        }
+
+        return chat
+    }
+
+    private func makeStats(
+        startTime: Date,
+        firstTokenTime: Date?,
+        generationTokenCount: Int,
+        generationTimeMs: Double,
+        toolExecutionTimeMs: Double
+    ) -> GenerationStats {
+        let endTime = Date()
+        let totalTime = endTime.timeIntervalSince(startTime) * 1000
+        let timeToFirstToken = (firstTokenTime ?? endTime).timeIntervalSince(startTime) * 1000
+        let tokensPerSecond = generationTimeMs > 0
+            ? Double(generationTokenCount) / (generationTimeMs / 1000)
+            : 0
+
+        return GenerationStats(
+            tokenCount: Double(generationTokenCount),
+            tokensPerSecond: tokensPerSecond,
+            timeToFirstToken: timeToFirstToken,
+            totalTime: totalTime,
+            toolExecutionTime: toolExecutionTimeMs
+        )
+    }
+
+    private func executeToolCall(
+        tool: ToolDefinition,
+        argsDict: [String: Any]
+    ) async throws -> String {
+        let argsAnyMap = dictionaryToAnyMap(argsDict)
+        let outerPromise = tool.handler(argsAnyMap)
+        let innerPromise = try await outerPromise.await()
+        let resultAnyMap = try await innerPromise.await()
+        let resultDict = anyMapToDictionary(resultAnyMap)
+        return dictionaryToJson(resultDict)
+    }
+
+    private func runManagedSession(
+        prompt: String,
+        batcher: TokenBatcher?
+    ) async throws -> ManagedSessionResult {
+        let session = try ensureManagedSession()
+
+        var output = ""
+        var firstTokenTime: Date?
+        var generationTokenCount = 0
+        var generationTimeMs: Double = 0
+
+        for try await generation in session.streamDetails(to: prompt, images: [], videos: []) {
+            if Task.isCancelled { break }
+
+            switch generation {
+            case .chunk(let text):
+                if firstTokenTime == nil {
+                    firstTokenTime = Date()
+                }
+
+                output += text
+                batcher?.append(text)
+
+            case .info(let info):
+                generationTokenCount += info.generationTokenCount
+                generationTimeMs += info.generateTime * 1000
+                log(
+                    "Generation info: \(info.generationTokenCount) tokens, \(String(format: "%.1f", info.tokensPerSecond)) tokens/s"
+                )
+
+            case .toolCall:
+                break
+            }
+        }
+
+        batcher?.flush()
+
+        return ManagedSessionResult(
+            output: output,
+            generationTokenCount: generationTokenCount,
+            generationTimeMs: generationTimeMs,
+            firstTokenTime: firstTokenTime
+        )
+    }
+
     func load(modelId: String, options: LLMLoadOptions?) throws -> Promise<Void> {
-        self.loadTask?.cancel()
+        loadTask?.cancel()
 
         return Promise.async { [self] in
             let task = Task { @MainActor in
-                Memory.cacheLimit = 2000000
+                Memory.cacheLimit = 2_000_000
 
-                self.currentTask?.cancel()
-                self.currentTask = nil
-                self.session = nil
-                self.container = nil
-                self.tools = []
-                self.toolSchemas = []
-                self.seedMessages = []
-                self.messageHistory = []
-                self.manageHistory = false
+                currentTask?.cancel()
+                currentTask = nil
+                session = nil
+                container = nil
+                tools = []
+                toolSchemas = []
+                seedMessages = []
+                messageHistory = []
+                manageHistory = false
+                generationParameters = GenerateParameters()
+                tokenBatchSize = 1
+                contextConfig = nil
                 self.modelId = ""
                 Memory.clearCache()
 
-                let memoryAfterCleanup = self.getMemoryUsage()
-                let gpuAfterCleanup = self.getGPUMemoryUsage()
+                let memoryAfterCleanup = getMemoryUsage()
+                let gpuAfterCleanup = getGPUMemoryUsage()
                 log("After cleanup - Host: \(memoryAfterCleanup), GPU: \(gpuAfterCleanup)")
 
                 if !(await ModelDownloader.shared.isDownloaded(modelId: modelId)) {
@@ -130,7 +452,7 @@ class HybridLLM: HybridLLMSpec {
                 log("Loading from directory: \(modelDir.path)")
 
                 let config = ModelConfiguration(directory: modelDir)
-                let loadedContainer = try await self.modelFactory.loadContainer(
+                let loadedContainer = try await modelFactory.loadContainer(
                     configuration: config
                 ) { progress in
                     options?.onProgress?(progress.fractionCompleted)
@@ -138,66 +460,116 @@ class HybridLLM: HybridLLMSpec {
 
                 try Task.checkCancellation()
 
-                let memoryAfterContainer = self.getMemoryUsage()
-                let gpuAfterContainer = self.getGPUMemoryUsage()
+                let memoryAfterContainer = getMemoryUsage()
+                let gpuAfterContainer = getGPUMemoryUsage()
                 log("Model loaded - Host: \(memoryAfterContainer), GPU: \(gpuAfterContainer)")
 
                 if let jsTools = options?.tools {
-                    self.tools = jsTools
-                    self.toolSchemas = jsTools.map { self.buildToolSchema(from: $0) }
-                    log("Loaded \(self.tools.count) tools: \(self.tools.map { $0.name })")
+                    tools = jsTools
+                    toolSchemas = jsTools.map { buildToolSchema(from: $0) }
+                    log("Loaded \(tools.count) tools: \(tools.map(\.name))")
                 }
 
-                let seedMessages = options?.additionalContext ?? []
-                let additionalContextDict: [String: Any]? = if !seedMessages.isEmpty {
-                    ["messages": seedMessages.map { ["role": $0.role, "content": $0.content] }]
-                } else {
-                    nil
-                }
+                generationParameters = buildGenerateParameters(from: options?.generationConfig)
+                tokenBatchSize = normalizedInt(options?.tokenBatchSize, minimum: 1) ?? 1
+                contextConfig = options?.contextConfig
 
                 self.container = loadedContainer
-                self.session = ChatSession(loadedContainer, instructions: self.systemPrompt, additionalContext: additionalContextDict)
                 self.modelId = modelId
+                manageHistory = options?.manageHistory ?? false
+                seedMessages = options?.additionalContext ?? []
+                messageHistory = []
 
-                self.manageHistory = options?.manageHistory ?? false
-                self.seedMessages = seedMessages
-                self.messageHistory = []
-
-                if self.manageHistory {
-                    log("History management enabled with \(self.seedMessages.count) seed messages")
+                if manageHistory {
+                    log("History management enabled with \(seedMessages.count) seed messages")
                 }
+
+                rebuildManagedSession()
             }
 
-            self.loadTask = task
+            loadTask = task
             try await task.value
         }
     }
 
     func generate(prompt: String) throws -> Promise<String> {
-        guard let session = session else {
+        guard let container else {
             throw LLMError.notLoaded
         }
 
         return Promise.async { [self] in
             let task = Task<String, Error> {
-                log("Generating response for: \(prompt.prefix(50))...")
-                let result = try await session.respond(to: prompt)
-                log("Generation complete")
+                let startTime = Date()
+
+                if canUseManagedSession {
+                    try await trimManagedHistoryIfNeeded(upcomingPrompt: prompt)
+
+                    let result = try await runManagedSession(prompt: prompt, batcher: nil)
+
+                    var updatedHistory = messageHistory
+                    updatedHistory.append(LLMMessage(role: "user", content: prompt))
+                    updatedHistory.append(LLMMessage(role: "assistant", content: result.output))
+                    try await finalizeManagedHistory(updatedHistory)
+
+                    let stats = makeStats(
+                        startTime: startTime,
+                        firstTokenTime: result.firstTokenTime,
+                        generationTokenCount: result.generationTokenCount,
+                        generationTimeMs: result.generationTimeMs,
+                        toolExecutionTimeMs: 0
+                    )
+                    lastStats = stats
+                    return result.output
+                }
+
+                if manageHistory {
+                    try await trimManagedHistoryIfNeeded(upcomingPrompt: prompt)
+                }
+
+                var history = messageHistory
+                var firstTokenTime: Date?
+                var generationTokenCount = 0
+                var generationTimeMs: Double = 0
+                var toolExecutionTime: Double = 0
+
+                let result = try await performGeneration(
+                    container: container,
+                    history: &history,
+                    prompt: prompt,
+                    toolResults: nil,
+                    depth: 0,
+                    onToken: { token in
+                        if !token.isEmpty && firstTokenTime == nil {
+                            firstTokenTime = Date()
+                        }
+                    },
+                    flushOutput: {},
+                    onGenerationInfo: { tokens, time in
+                        generationTokenCount += tokens
+                        generationTimeMs += time
+                    },
+                    onToolCall: { _, _ in },
+                    toolExecutionTime: &toolExecutionTime
+                )
+
+                try await finalizeManagedHistory(history)
+
+                lastStats = makeStats(
+                    startTime: startTime,
+                    firstTokenTime: firstTokenTime,
+                    generationTokenCount: generationTokenCount,
+                    generationTimeMs: generationTimeMs,
+                    toolExecutionTimeMs: toolExecutionTime
+                )
+
                 return result
             }
 
-            self.currentTask = task
-            defer { self.currentTask = nil }
-
-            let result = try await task.value
-
-            self.recordManagedTurn(userPrompt: prompt, assistantResponse: result)
-
-            return result
+            currentTask = task
+            defer { currentTask = nil }
+            return try await task.value
         }
     }
-
-    private let maxToolCallDepth = 10
 
     func stream(
         prompt: String,
@@ -211,48 +583,83 @@ class HybridLLM: HybridLLMSpec {
         return Promise.async { [self] in
             let task = Task<String, Error> {
                 let startTime = Date()
-                var firstTokenTime: Date?
-                var tokenCount = 0
+                let batcher = TokenBatcher(batchSize: tokenBatchSize, emit: onToken)
 
-                let result = try await self.performGeneration(
+                if canUseManagedSession {
+                    try await trimManagedHistoryIfNeeded(upcomingPrompt: prompt)
+
+                    let result = try await runManagedSession(prompt: prompt, batcher: batcher)
+
+                    var updatedHistory = messageHistory
+                    updatedHistory.append(LLMMessage(role: "user", content: prompt))
+                    updatedHistory.append(LLMMessage(role: "assistant", content: result.output))
+                    try await finalizeManagedHistory(updatedHistory)
+
+                    let stats = makeStats(
+                        startTime: startTime,
+                        firstTokenTime: result.firstTokenTime,
+                        generationTokenCount: result.generationTokenCount,
+                        generationTimeMs: result.generationTimeMs,
+                        toolExecutionTimeMs: 0
+                    )
+                    lastStats = stats
+                    return result.output
+                }
+
+                if manageHistory {
+                    try await trimManagedHistoryIfNeeded(upcomingPrompt: prompt)
+                }
+
+                var history = messageHistory
+                var firstTokenTime: Date?
+                var generationTokenCount = 0
+                var generationTimeMs: Double = 0
+                var toolExecutionTime: Double = 0
+
+                let result = try await performGeneration(
                     container: container,
-                    conversationHistory: self.baseConversationHistory(appendingUserPrompt: prompt),
+                    history: &history,
+                    prompt: prompt,
+                    toolResults: nil,
                     depth: 0,
                     onToken: { token in
-                        if firstTokenTime == nil {
+                        if !token.isEmpty && firstTokenTime == nil {
                             firstTokenTime = Date()
                         }
-                        tokenCount += 1
-                        onToken(token)
+                        batcher.append(token)
                     },
-                    onToolCall: onToolCall ?? { _, _ in }
+                    flushOutput: {
+                        batcher.flush()
+                    },
+                    onGenerationInfo: { tokens, time in
+                        generationTokenCount += tokens
+                        generationTimeMs += time
+                    },
+                    onToolCall: onToolCall ?? { _, _ in },
+                    toolExecutionTime: &toolExecutionTime
                 )
 
-                let endTime = Date()
-                let totalTime = endTime.timeIntervalSince(startTime) * 1000
-                let timeToFirstToken = (firstTokenTime ?? endTime).timeIntervalSince(startTime) * 1000
-                let tokensPerSecond = totalTime > 0 ? Double(tokenCount) / (totalTime / 1000) : 0
+                batcher.flush()
+                try await finalizeManagedHistory(history)
 
-                self.lastStats = GenerationStats(
-                    tokenCount: Double(tokenCount),
-                    tokensPerSecond: tokensPerSecond,
-                    timeToFirstToken: timeToFirstToken,
-                    totalTime: totalTime,
-                    toolExecutionTime: 0
+                let stats = makeStats(
+                    startTime: startTime,
+                    firstTokenTime: firstTokenTime,
+                    generationTokenCount: generationTokenCount,
+                    generationTimeMs: generationTimeMs,
+                    toolExecutionTimeMs: toolExecutionTime
                 )
+                lastStats = stats
 
-                log("Stream complete - \(tokenCount) tokens, \(String(format: "%.1f", tokensPerSecond)) tokens/s")
+                log(
+                    "Stream complete - \(generationTokenCount) tokens, \(String(format: "%.1f", stats.tokensPerSecond)) tokens/s"
+                )
                 return result
             }
 
-            self.currentTask = task
-            defer { self.currentTask = nil }
-
-            let result = try await task.value
-
-            self.recordManagedTurn(userPrompt: prompt, assistantResponse: result)
-
-            return result
+            currentTask = task
+            defer { currentTask = nil }
+            return try await task.value
         }
     }
 
@@ -267,124 +674,104 @@ class HybridLLM: HybridLLMSpec {
         return Promise.async { [self] in
             let task = Task<String, Error> {
                 let startTime = Date()
-                var firstTokenTime: Date?
-                var outputTokenCount = 0
-                var mlxTokenCount = 0
-                var mlxGenerationTime: Double = 0
-                var toolExecutionTime: Double = 0
                 let emitter = StreamEventEmitter(callback: onEvent)
-
                 emitter.emitGenerationStart()
 
-                let result = try await self.performGenerationWithEvents(
+                if canUseManagedSession {
+                    try await trimManagedHistoryIfNeeded(upcomingPrompt: prompt)
+
+                    let batcher = TokenBatcher(batchSize: tokenBatchSize) { token in
+                        emitter.emitToken(token)
+                    }
+                    let result = try await runManagedSession(prompt: prompt, batcher: batcher)
+
+                    var updatedHistory = messageHistory
+                    updatedHistory.append(LLMMessage(role: "user", content: prompt))
+                    updatedHistory.append(LLMMessage(role: "assistant", content: result.output))
+                    try await finalizeManagedHistory(updatedHistory)
+
+                    let stats = makeStats(
+                        startTime: startTime,
+                        firstTokenTime: result.firstTokenTime,
+                        generationTokenCount: result.generationTokenCount,
+                        generationTimeMs: result.generationTimeMs,
+                        toolExecutionTimeMs: 0
+                    )
+                    lastStats = stats
+                    emitter.emitGenerationEnd(content: result.output, stats: stats)
+                    return result.output
+                }
+
+                if manageHistory {
+                    try await trimManagedHistoryIfNeeded(upcomingPrompt: prompt)
+                }
+
+                var history = messageHistory
+                var firstTokenTime: Date?
+                var generationTokenCount = 0
+                var generationTimeMs: Double = 0
+                var toolExecutionTime: Double = 0
+                let tokenBatcher = TokenBatcher(batchSize: tokenBatchSize) { token in
+                    emitter.emitToken(token)
+                }
+
+                let result = try await performGenerationWithEvents(
                     container: container,
-                    conversationHistory: self.baseConversationHistory(appendingUserPrompt: prompt),
+                    history: &history,
+                    prompt: prompt,
+                    toolResults: nil,
                     depth: 0,
                     emitter: emitter,
-                    onTokenProcessed: {
-                        if firstTokenTime == nil {
+                    emitToken: { token in
+                        if !token.isEmpty && firstTokenTime == nil {
                             firstTokenTime = Date()
                         }
-                        outputTokenCount += 1
+                        tokenBatcher.append(token)
+                    },
+                    flushTokenBatch: {
+                        tokenBatcher.flush()
                     },
                     onGenerationInfo: { tokens, time in
-                        mlxTokenCount += tokens
-                        mlxGenerationTime += time
+                        generationTokenCount += tokens
+                        generationTimeMs += time
                     },
                     toolExecutionTime: &toolExecutionTime
                 )
 
-                let endTime = Date()
-                let totalTime = endTime.timeIntervalSince(startTime) * 1000
-                let timeToFirstToken = (firstTokenTime ?? endTime).timeIntervalSince(startTime) * 1000
-                let tokensPerSecond = mlxGenerationTime > 0 ? Double(mlxTokenCount) / (mlxGenerationTime / 1000) : 0
+                tokenBatcher.flush()
+                try await finalizeManagedHistory(history)
 
-                let stats = GenerationStats(
-                    tokenCount: Double(mlxTokenCount),
-                    tokensPerSecond: tokensPerSecond,
-                    timeToFirstToken: timeToFirstToken,
-                    totalTime: totalTime,
-                    toolExecutionTime: toolExecutionTime
+                let stats = makeStats(
+                    startTime: startTime,
+                    firstTokenTime: firstTokenTime,
+                    generationTokenCount: generationTokenCount,
+                    generationTimeMs: generationTimeMs,
+                    toolExecutionTimeMs: toolExecutionTime
                 )
-
-                self.lastStats = stats
+                lastStats = stats
                 emitter.emitGenerationEnd(content: result, stats: stats)
 
-                log("StreamWithEvents complete - \(mlxTokenCount) tokens, \(String(format: "%.1f", tokensPerSecond)) tokens/s (tool execution: \(String(format: "%.0f", toolExecutionTime))ms)")
+                log(
+                    "StreamWithEvents complete - \(generationTokenCount) tokens, \(String(format: "%.1f", stats.tokensPerSecond)) tokens/s (tool execution: \(String(format: "%.0f", toolExecutionTime))ms)"
+                )
                 return result
             }
 
-            self.currentTask = task
-            defer { self.currentTask = nil }
-
-            let result = try await task.value
-
-            self.recordManagedTurn(userPrompt: prompt, assistantResponse: result)
-
-            return result
+            currentTask = task
+            defer { currentTask = nil }
+            return try await task.value
         }
-    }
-
-    private func baseConversationHistory(appendingUserPrompt prompt: String? = nil) -> [LLMMessage] {
-        var history = seedMessages
-        if manageHistory {
-            history.append(contentsOf: messageHistory)
-        }
-        if let prompt {
-            history.append(LLMMessage(role: "user", content: prompt))
-        }
-        return history
-    }
-
-    private func recordManagedTurn(userPrompt: String, assistantResponse: String) {
-        guard manageHistory else {
-            return
-        }
-
-        messageHistory.append(LLMMessage(role: "user", content: userPrompt))
-        if !assistantResponse.isEmpty {
-            messageHistory.append(LLMMessage(role: "assistant", content: assistantResponse))
-        }
-    }
-
-    private func buildChatMessages(from history: [LLMMessage]) -> [Chat.Message] {
-        var chat: [Chat.Message] = []
-
-        if !self.systemPrompt.isEmpty {
-            chat.append(.system(self.systemPrompt))
-        }
-
-        for msg in history {
-            switch msg.role {
-            case "user": chat.append(.user(msg.content))
-            case "assistant": chat.append(.assistant(msg.content))
-            case "system": chat.append(.system(msg.content))
-            case "tool": chat.append(.tool(msg.content))
-            default: break
-            }
-        }
-
-        return chat
-    }
-
-    private func executeToolCall(
-        tool: ToolDefinition,
-        argsDict: [String: Any]
-    ) async throws -> String {
-        let argsAnyMap = self.dictionaryToAnyMap(argsDict)
-        let outerPromise = tool.handler(argsAnyMap)
-        let innerPromise = try await outerPromise.await()
-        let resultAnyMap = try await innerPromise.await()
-        let resultDict = self.anyMapToDictionary(resultAnyMap)
-        return dictionaryToJson(resultDict)
     }
 
     private func performGenerationWithEvents(
         container: ModelContainer,
-        conversationHistory: [LLMMessage],
+        history: inout [LLMMessage],
+        prompt: String,
+        toolResults: [String]?,
         depth: Int,
         emitter: StreamEventEmitter,
-        onTokenProcessed: @escaping () -> Void,
+        emitToken: @escaping (String) -> Void,
+        flushTokenBatch: @escaping () -> Void,
         onGenerationInfo: @escaping (Int, Double) -> Void,
         toolExecutionTime: inout Double
     ) async throws -> String {
@@ -397,19 +784,19 @@ class HybridLLM: HybridLLMSpec {
         var thinkingMachine = ThinkingStateMachine()
         var pendingToolCalls: [(id: String, tool: ToolDefinition, args: [String: Any], argsJson: String)] = []
 
-        let chat = buildChatMessages(from: conversationHistory)
-        let userInput = UserInput(
-            chat: chat,
-            tools: !self.toolSchemas.isEmpty ? self.toolSchemas : nil
+        let chat = buildChatMessages(
+            history: history,
+            prompt: prompt,
+            toolResults: toolResults,
+            depth: depth
         )
-
+        let userInput = UserInput(chat: chat, tools: configuredToolSchemas())
         let lmInput = try await container.prepare(input: userInput)
 
         let stream = try await container.perform { context in
-            let parameters = GenerateParameters(maxTokens: 2048, temperature: 0.7)
-            return try MLXLMCommon.generate(
+            try MLXLMCommon.generate(
                 input: lmInput,
-                parameters: parameters,
+                parameters: generationParameters,
                 context: context
             )
         }
@@ -425,38 +812,50 @@ class HybridLLM: HybridLLMSpec {
                     switch machineOutput {
                     case .token(let token):
                         output += token
-                        emitter.emitToken(token)
-                        onTokenProcessed()
+                        emitToken(token)
 
                     case .thinkingStart:
+                        flushTokenBatch()
                         emitter.emitThinkingStart()
 
                     case .thinkingChunk(let chunk):
+                        flushTokenBatch()
                         emitter.emitThinkingChunk(chunk)
 
                     case .thinkingEnd(let content):
+                        flushTokenBatch()
                         emitter.emitThinkingEnd(content)
                     }
                 }
 
             case .toolCall(let toolCall):
+                flushTokenBatch()
                 log("Tool call detected: \(toolCall.function.name)")
 
-                guard let tool = self.tools.first(where: { $0.name == toolCall.function.name }) else {
+                guard let tool = tools.first(where: { $0.name == toolCall.function.name }) else {
                     log("Unknown tool: \(toolCall.function.name)")
                     continue
                 }
 
                 let toolCallId = UUID().uuidString
-                let argsDict = self.convertToolCallArguments(toolCall.function.arguments)
+                let argsDict = convertToolCallArguments(toolCall.function.arguments)
                 let argsJson = dictionaryToJson(argsDict)
 
-                emitter.emitToolCallStart(id: toolCallId, name: toolCall.function.name, arguments: argsJson)
+                emitter.emitToolCallStart(
+                    id: toolCallId,
+                    name: toolCall.function.name,
+                    arguments: argsJson
+                )
                 pendingToolCalls.append((id: toolCallId, tool: tool, args: argsDict, argsJson: argsJson))
 
             case .info(let info):
-                log("Generation info: \(info.generationTokenCount) tokens, \(String(format: "%.1f", info.tokensPerSecond)) tokens/s")
-                let generationTime = info.tokensPerSecond > 0 ? Double(info.generationTokenCount) / info.tokensPerSecond * 1000 : 0
+                flushTokenBatch()
+                log(
+                    "Generation info: \(info.generationTokenCount) tokens, \(String(format: "%.1f", info.tokensPerSecond)) tokens/s"
+                )
+                let generationTime = info.tokensPerSecond > 0
+                    ? Double(info.generationTokenCount) / info.tokensPerSecond * 1000
+                    : 0
                 onGenerationInfo(info.generationTokenCount, generationTime)
             }
         }
@@ -466,20 +865,23 @@ class HybridLLM: HybridLLMSpec {
             switch machineOutput {
             case .token(let token):
                 output += token
-                emitter.emitToken(token)
-                onTokenProcessed()
+                emitToken(token)
             case .thinkingStart:
+                flushTokenBatch()
                 emitter.emitThinkingStart()
             case .thinkingChunk(let chunk):
+                flushTokenBatch()
                 emitter.emitThinkingChunk(chunk)
             case .thinkingEnd(let content):
+                flushTokenBatch()
                 emitter.emitThinkingEnd(content)
             }
         }
 
+        flushTokenBatch()
+
         if !pendingToolCalls.isEmpty {
             log("Executing \(pendingToolCalls.count) tool call(s)")
-
             let toolStartTime = Date()
 
             for call in pendingToolCalls {
@@ -490,12 +892,15 @@ class HybridLLM: HybridLLMSpec {
                 for (index, call) in pendingToolCalls.enumerated() {
                     group.addTask { [self] in
                         do {
-                            let resultJson = try await self.executeToolCall(tool: call.tool, argsDict: call.args)
-                            self.log("Tool result for \(call.tool.name): \(resultJson.prefix(100))...")
+                            let resultJson = try await executeToolCall(
+                                tool: call.tool,
+                                argsDict: call.args
+                            )
+                            log("Tool result for \(call.tool.name): \(resultJson.prefix(100))...")
                             emitter.emitToolCallCompleted(id: call.id, result: resultJson)
                             return (index, resultJson)
                         } catch {
-                            self.log("Tool execution error for \(call.tool.name): \(error)")
+                            log("Tool execution error for \(call.tool.name): \(error)")
                             emitter.emitToolCallFailed(id: call.id, error: error.localizedDescription)
                             return (index, "{\"error\": \"Tool execution failed\"}")
                         }
@@ -511,20 +916,25 @@ class HybridLLM: HybridLLMSpec {
 
             toolExecutionTime += Date().timeIntervalSince(toolStartTime) * 1000
 
-            var nextConversationHistory = conversationHistory
+            if depth == 0 {
+                history.append(LLMMessage(role: "user", content: prompt))
+            }
             if !output.isEmpty {
-                nextConversationHistory.append(LLMMessage(role: "assistant", content: output))
+                history.append(LLMMessage(role: "assistant", content: output))
             }
             for result in allToolResults {
-                nextConversationHistory.append(LLMMessage(role: "tool", content: result))
+                history.append(LLMMessage(role: "tool", content: result))
             }
 
-            let continuation = try await self.performGenerationWithEvents(
+            let continuation = try await performGenerationWithEvents(
                 container: container,
-                conversationHistory: nextConversationHistory,
+                history: &history,
+                prompt: prompt,
+                toolResults: allToolResults,
                 depth: depth + 1,
                 emitter: emitter,
-                onTokenProcessed: onTokenProcessed,
+                emitToken: emitToken,
+                flushTokenBatch: flushTokenBatch,
                 onGenerationInfo: onGenerationInfo,
                 toolExecutionTime: &toolExecutionTime
             )
@@ -532,15 +942,29 @@ class HybridLLM: HybridLLMSpec {
             return output + continuation
         }
 
+        if manageHistory {
+            if depth == 0 {
+                history.append(LLMMessage(role: "user", content: prompt))
+            }
+            if !output.isEmpty {
+                history.append(LLMMessage(role: "assistant", content: output))
+            }
+        }
+
         return output
     }
 
     private func performGeneration(
         container: ModelContainer,
-        conversationHistory: [LLMMessage],
+        history: inout [LLMMessage],
+        prompt: String,
+        toolResults: [String]?,
         depth: Int,
         onToken: @escaping (String) -> Void,
-        onToolCall: @escaping (String, String) -> Void
+        flushOutput: @escaping () -> Void,
+        onGenerationInfo: @escaping (Int, Double) -> Void,
+        onToolCall: @escaping (String, String) -> Void,
+        toolExecutionTime: inout Double
     ) async throws -> String {
         if depth >= maxToolCallDepth {
             log("Max tool call depth reached (\(maxToolCallDepth))")
@@ -550,19 +974,19 @@ class HybridLLM: HybridLLMSpec {
         var output = ""
         var pendingToolCalls: [(tool: ToolDefinition, args: [String: Any], argsJson: String)] = []
 
-        let chat = buildChatMessages(from: conversationHistory)
-        let userInput = UserInput(
-            chat: chat,
-            tools: !self.toolSchemas.isEmpty ? self.toolSchemas : nil
+        let chat = buildChatMessages(
+            history: history,
+            prompt: prompt,
+            toolResults: toolResults,
+            depth: depth
         )
-
+        let userInput = UserInput(chat: chat, tools: configuredToolSchemas())
         let lmInput = try await container.prepare(input: userInput)
 
         let stream = try await container.perform { context in
-            let parameters = GenerateParameters(maxTokens: 2048, temperature: 0.7)
-            return try MLXLMCommon.generate(
+            try MLXLMCommon.generate(
                 input: lmInput,
-                parameters: parameters,
+                parameters: generationParameters,
                 context: context
             )
         }
@@ -576,36 +1000,48 @@ class HybridLLM: HybridLLMSpec {
                 onToken(text)
 
             case .toolCall(let toolCall):
+                flushOutput()
                 log("Tool call detected: \(toolCall.function.name)")
 
-                guard let tool = self.tools.first(where: { $0.name == toolCall.function.name }) else {
+                guard let tool = tools.first(where: { $0.name == toolCall.function.name }) else {
                     log("Unknown tool: \(toolCall.function.name)")
                     continue
                 }
 
-                let argsDict = self.convertToolCallArguments(toolCall.function.arguments)
+                let argsDict = convertToolCallArguments(toolCall.function.arguments)
                 let argsJson = dictionaryToJson(argsDict)
 
                 pendingToolCalls.append((tool: tool, args: argsDict, argsJson: argsJson))
                 onToolCall(toolCall.function.name, argsJson)
 
             case .info(let info):
-                log("Generation info: \(info.generationTokenCount) tokens, \(String(format: "%.1f", info.tokensPerSecond)) tokens/s")
+                flushOutput()
+                log(
+                    "Generation info: \(info.generationTokenCount) tokens, \(String(format: "%.1f", info.tokensPerSecond)) tokens/s"
+                )
+                let generationTime = info.tokensPerSecond > 0
+                    ? Double(info.generationTokenCount) / info.tokensPerSecond * 1000
+                    : 0
+                onGenerationInfo(info.generationTokenCount, generationTime)
             }
         }
 
         if !pendingToolCalls.isEmpty {
             log("Executing \(pendingToolCalls.count) tool call(s)")
+            let toolStartTime = Date()
 
             let allToolResults: [String] = await withTaskGroup(of: (Int, String).self) { group in
                 for (index, call) in pendingToolCalls.enumerated() {
                     group.addTask { [self] in
                         do {
-                            let resultJson = try await self.executeToolCall(tool: call.tool, argsDict: call.args)
-                            self.log("Tool result for \(call.tool.name): \(resultJson.prefix(100))...")
+                            let resultJson = try await executeToolCall(
+                                tool: call.tool,
+                                argsDict: call.args
+                            )
+                            log("Tool result for \(call.tool.name): \(resultJson.prefix(100))...")
                             return (index, resultJson)
                         } catch {
-                            self.log("Tool execution error for \(call.tool.name): \(error)")
+                            log("Tool execution error for \(call.tool.name): \(error)")
                             return (index, "{\"error\": \"Tool execution failed\"}")
                         }
                     }
@@ -618,25 +1054,44 @@ class HybridLLM: HybridLLMSpec {
                 return results
             }
 
-            var nextConversationHistory = conversationHistory
+            toolExecutionTime += Date().timeIntervalSince(toolStartTime) * 1000
+
+            if depth == 0 {
+                history.append(LLMMessage(role: "user", content: prompt))
+            }
             if !output.isEmpty {
-                nextConversationHistory.append(LLMMessage(role: "assistant", content: output))
+                history.append(LLMMessage(role: "assistant", content: output))
             }
             for result in allToolResults {
-                nextConversationHistory.append(LLMMessage(role: "tool", content: result))
+                history.append(LLMMessage(role: "tool", content: result))
             }
 
+            flushOutput()
             onToken("\u{200B}")
 
-            let continuation = try await self.performGeneration(
+            let continuation = try await performGeneration(
                 container: container,
-                conversationHistory: nextConversationHistory,
+                history: &history,
+                prompt: prompt,
+                toolResults: allToolResults,
                 depth: depth + 1,
                 onToken: onToken,
-                onToolCall: onToolCall
+                flushOutput: flushOutput,
+                onGenerationInfo: onGenerationInfo,
+                onToolCall: onToolCall,
+                toolExecutionTime: &toolExecutionTime
             )
 
             return output + continuation
+        }
+
+        if manageHistory {
+            if depth == 0 {
+                history.append(LLMMessage(role: "user", content: prompt))
+            }
+            if !output.isEmpty {
+                history.append(LLMMessage(role: "assistant", content: output))
+            }
         }
 
         return output
@@ -702,8 +1157,12 @@ class HybridLLM: HybridLLMSpec {
         container = nil
         tools = []
         toolSchemas = []
+        seedMessages = []
         messageHistory = []
         manageHistory = false
+        generationParameters = GenerateParameters()
+        tokenBatchSize = 1
+        contextConfig = nil
         modelId = ""
 
         MLX.Memory.clearCache()
@@ -714,15 +1173,16 @@ class HybridLLM: HybridLLMSpec {
     }
 
     func getLastGenerationStats() throws -> GenerationStats {
-        return lastStats
+        lastStats
     }
 
     func getHistory() throws -> [LLMMessage] {
-        return baseConversationHistory()
+        combinedHistory(with: messageHistory)
     }
 
     func clearHistory() throws {
         messageHistory = []
+        rebuildManagedSession()
         log("Message history cleared")
     }
 }
