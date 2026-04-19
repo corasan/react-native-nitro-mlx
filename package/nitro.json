@@ -10,16 +10,28 @@
   },
   "autolinking": {
     "LLM": {
-      "swift": "HybridLLM"
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridLLM"
+      }
     },
     "ModelManager": {
-      "swift": "HybridModelManager"
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridModelManager"
+      }
     },
     "TTS": {
-      "swift": "HybridTTS"
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridTTS"
+      }
     },
     "STT": {
-      "swift": "HybridSTT"
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridSTT"
+      }
     }
   },
   "ignorePaths": ["**/node_modules"]

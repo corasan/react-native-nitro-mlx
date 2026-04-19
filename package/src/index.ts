@@ -19,6 +19,8 @@ export type {
   GenerationStats,
   LLM as LLMSpec,
   LLMLoadOptions,
+  LLMGenerationConfig,
+  LLMContextConfig,
   StreamEvent,
   GenerationStartEvent,
   TokenEvent,

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "example",
-    "slug": "example",
+    "name": "nitro-mlx-example",
+    "slug": "nitro-mlx",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -35,7 +35,8 @@
         {
           "ios": {
             "deploymentTarget": "26.0",
-            "networkInspector": true
+            "networkInspector": true,
+            "useFrameworks": "static"
           }
         }
       ],

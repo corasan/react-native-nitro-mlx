@@ -18,7 +18,7 @@ export type EventCallback = (event: StreamEvent) => void
 let instance: LLMSpec | null = null
 
 export type Message = {
-  role: 'user' | 'assistant' | 'system'
+  role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
 }
 

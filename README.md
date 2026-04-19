@@ -38,7 +38,19 @@ import { LLM } from 'react-native-nitro-mlx'
 await LLM.load('mlx-community/Qwen3-0.6B-4bit', {
   onProgress: (progress) => {
     console.log(`Loading: ${(progress * 100).toFixed(0)}%`)
-  }
+  },
+  manageHistory: true,
+  generationConfig: {
+    maxTokens: 1024,
+    temperature: 0.7,
+    topP: 0.9,
+    prefillStepSize: 512,
+  },
+  tokenBatchSize: 8,
+  contextConfig: {
+    maxContextTokens: 4096,
+    keepLastMessages: 6,
+  },
 })
 
 const response = await LLM.generate('What is the capital of France?')
@@ -139,6 +151,11 @@ const final = await STT.stopListening()      // Stop and get final transcript
 |----------|------|-------------|
 | `onProgress` | `(progress: number) => void` | Optional callback invoked with loading progress (0-1) |
 | `additionalContext` | `LLMMessage[]` | Optional conversation history or few-shot examples to provide to the model |
+| `manageHistory` | `boolean` | Enables managed chat history |
+| `tools` | `ToolDefinition[]` | Tools the model may call while streaming |
+| `generationConfig` | `LLMGenerationConfig` | Default generation parameters such as `maxTokens`, `temperature`, `topP`, KV cache config, and `prefillStepSize` |
+| `tokenBatchSize` | `number` | Number of streamed chunks to batch before crossing the JS bridge |
+| `contextConfig` | `LLMContextConfig` | Managed-history trimming settings such as `maxContextTokens` and `keepLastMessages` |
 
 #### LLMMessage
 
