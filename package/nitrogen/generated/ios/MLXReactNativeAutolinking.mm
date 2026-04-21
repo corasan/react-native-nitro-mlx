@@ -14,6 +14,7 @@
 #include "HybridModelManagerSpecSwift.hpp"
 #include "HybridTTSSpecSwift.hpp"
 #include "HybridSTTSpecSwift.hpp"
+#include "HybridEmbeddingsSpecSwift.hpp"
 
 @interface MLXReactNativeAutolinking : NSObject
 @end
@@ -49,6 +50,13 @@
     "STT",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridSTTSpec> hybridObject = MLXReactNative::MLXReactNativeAutolinking::createSTT();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "Embeddings",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridEmbeddingsSpec> hybridObject = MLXReactNative::MLXReactNativeAutolinking::createEmbeddings();
       return hybridObject;
     }
   );

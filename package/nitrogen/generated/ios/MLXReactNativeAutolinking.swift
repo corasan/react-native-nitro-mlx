@@ -59,4 +59,16 @@ public final class MLXReactNativeAutolinking {
   public static func isSTTRecyclable() -> Bool {
     return HybridSTT.self is any RecyclableView.Type
   }
+  
+  public static func createEmbeddings() -> bridge.std__shared_ptr_HybridEmbeddingsSpec_ {
+    let hybridObject = HybridEmbeddings()
+    return { () -> bridge.std__shared_ptr_HybridEmbeddingsSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isEmbeddingsRecyclable() -> Bool {
+    return HybridEmbeddings.self is any RecyclableView.Type
+  }
 }

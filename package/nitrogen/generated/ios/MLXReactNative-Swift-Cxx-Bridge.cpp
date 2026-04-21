@@ -8,6 +8,7 @@
 #include "MLXReactNative-Swift-Cxx-Bridge.hpp"
 
 // Include C++ implementation defined types
+#include "HybridEmbeddingsSpecSwift.hpp"
 #include "HybridLLMSpecSwift.hpp"
 #include "HybridModelManagerSpecSwift.hpp"
 #include "HybridSTTSpecSwift.hpp"
@@ -39,6 +40,38 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
     return [swiftClosure = std::move(swiftClosure)](double progress) mutable -> void {
       swiftClosure.call(progress);
     };
+  }
+  
+  // pragma MARK: std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>
+  Func_void_std__shared_ptr_ArrayBuffer_ create_Func_void_std__shared_ptr_ArrayBuffer_(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = MLXReactNative::Func_void_std__shared_ptr_ArrayBuffer_::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::shared_ptr<ArrayBuffer>& result) mutable -> void {
+      swiftClosure.call(ArrayBufferHolder(result));
+    };
+  }
+  
+  // pragma MARK: std::function<void(const std::vector<std::shared_ptr<ArrayBuffer>>& /* result */)>
+  Func_void_std__vector_std__shared_ptr_ArrayBuffer__ create_Func_void_std__vector_std__shared_ptr_ArrayBuffer__(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = MLXReactNative::Func_void_std__vector_std__shared_ptr_ArrayBuffer__::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::vector<std::shared_ptr<ArrayBuffer>>& result) mutable -> void {
+      swiftClosure.call(result);
+    };
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridEmbeddingsSpec>
+  std::shared_ptr<HybridEmbeddingsSpec> create_std__shared_ptr_HybridEmbeddingsSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    MLXReactNative::HybridEmbeddingsSpec_cxx swiftPart = MLXReactNative::HybridEmbeddingsSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::mlxreactnative::HybridEmbeddingsSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridEmbeddingsSpec_(std__shared_ptr_HybridEmbeddingsSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::mlxreactnative::HybridEmbeddingsSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::mlxreactnative::HybridEmbeddingsSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridEmbeddingsSpec\" is not implemented in Swift!");
+    }
+    #endif
+    MLXReactNative::HybridEmbeddingsSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
   }
   
   // pragma MARK: std::function<void(const std::shared_ptr<AnyMap>& /* result */)>
@@ -144,14 +177,6 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
     #endif
     MLXReactNative::HybridSTTSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
-  }
-  
-  // pragma MARK: std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>
-  Func_void_std__shared_ptr_ArrayBuffer_ create_Func_void_std__shared_ptr_ArrayBuffer_(void* NON_NULL swiftClosureWrapper) noexcept {
-    auto swiftClosure = MLXReactNative::Func_void_std__shared_ptr_ArrayBuffer_::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](const std::shared_ptr<ArrayBuffer>& result) mutable -> void {
-      swiftClosure.call(ArrayBufferHolder(result));
-    };
   }
   
   // pragma MARK: std::shared_ptr<HybridTTSSpec>

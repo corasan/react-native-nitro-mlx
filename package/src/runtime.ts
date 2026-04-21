@@ -1,3 +1,4 @@
+import type { EmbeddingsLoadOptions } from './specs/Embeddings.nitro'
 import type { LLMLoadOptions, ToolDefinition } from './specs/LLM.nitro'
 import type { TTSGenerateOptions, TTSLoadOptions } from './specs/TTS.nitro'
 import type { STTLoadOptions } from './specs/STT.nitro'
@@ -110,6 +111,19 @@ export function validateSTTLoadOptions(options?: STTLoadOptions): STTLoadOptions
   return {
     ...options,
     onProgress: createSafeCallback('STT.load onProgress', options.onProgress),
+  }
+}
+
+export function validateEmbeddingsLoadOptions(
+  options?: EmbeddingsLoadOptions,
+): EmbeddingsLoadOptions | undefined {
+  if (!options) {
+    return undefined
+  }
+
+  return {
+    ...options,
+    onProgress: createSafeCallback('Embeddings.load onProgress', options.onProgress),
   }
 }
 

@@ -8,8 +8,12 @@
 #pragma once
 
 // Forward declarations of C++ defined types
+// Forward declaration of `EmbeddingsLoadOptions` to properly resolve imports.
+namespace margelo::nitro::mlxreactnative { struct EmbeddingsLoadOptions; }
 // Forward declaration of `GenerationStats` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct GenerationStats; }
+// Forward declaration of `HybridEmbeddingsSpec` to properly resolve imports.
+namespace margelo::nitro::mlxreactnative { class HybridEmbeddingsSpec; }
 // Forward declaration of `HybridLLMSpec` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { class HybridLLMSpec; }
 // Forward declaration of `HybridModelManagerSpec` to properly resolve imports.
@@ -38,7 +42,9 @@ namespace margelo::nitro::mlxreactnative { struct ToolDefinition; }
 namespace margelo::nitro::mlxreactnative { struct ToolParameter; }
 
 // Include C++ defined types
+#include "EmbeddingsLoadOptions.hpp"
 #include "GenerationStats.hpp"
+#include "HybridEmbeddingsSpec.hpp"
 #include "HybridLLMSpec.hpp"
 #include "HybridModelManagerSpec.hpp"
 #include "HybridSTTSpec.hpp"
@@ -73,6 +79,8 @@ namespace margelo::nitro::mlxreactnative { struct ToolParameter; }
 #include <NitroModules/DateToChronoDate.hpp>
 
 // Forward declarations of Swift defined types
+// Forward declaration of `HybridEmbeddingsSpec_cxx` to properly resolve imports.
+namespace MLXReactNative { class HybridEmbeddingsSpec_cxx; }
 // Forward declaration of `HybridLLMSpec_cxx` to properly resolve imports.
 namespace MLXReactNative { class HybridLLMSpec_cxx; }
 // Forward declaration of `HybridModelManagerSpec_cxx` to properly resolve imports.

@@ -32,6 +32,12 @@
         "language": "swift",
         "implementationClassName": "HybridSTT"
       }
+    },
+    "Embeddings": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridEmbeddings"
+      }
     }
   },
   "ignorePaths": ["**/node_modules"]

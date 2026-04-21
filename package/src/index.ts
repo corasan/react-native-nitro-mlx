@@ -50,3 +50,8 @@ export type {
   STTLoadOptions,
   STTTranscriptionInfo,
 } from './specs/STT.nitro'
+export { Embeddings, cosineSimilarity } from './embeddings'
+export type {
+  Embeddings as EmbeddingsSpec,
+  EmbeddingsLoadOptions,
+} from './specs/Embeddings.nitro'
