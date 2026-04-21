@@ -2,6 +2,7 @@ import Foundation
 import NitroModules
 internal import MLX
 internal import MLXEmbedders
+internal import MLXLMCommon
 internal import Tokenizers
 
 enum EmbeddingsError: Error {
@@ -10,9 +11,10 @@ enum EmbeddingsError: Error {
 }
 
 class HybridEmbeddings: HybridEmbeddingsSpec {
-  private var container: ModelContainer?
+  private var container: EmbedderModelContainer?
   private var loadTask: Task<Void, Error>?
   private var currentTask: Task<Any, Error>?
+  private let tokenizerLoader: any TokenizerLoader = EmbeddingsTokenizerLoader()
 
   private var cachedDimension: Int = 0
   private var cachedMaxSeqLen: Int = 0
@@ -71,10 +73,10 @@ class HybridEmbeddings: HybridEmbeddingsSpec {
         }
 
         let modelDir = await ModelDownloader.shared.getModelDirectory(modelId: modelId)
-        let config = ModelConfiguration(directory: modelDir)
-        let loadedContainer = try await loadModelContainer(configuration: config) { progress in
-          options?.onProgress?(progress.fractionCompleted)
-        }
+        let loadedContainer = try await EmbedderModelFactory.shared.loadContainer(
+          from: modelDir,
+          using: tokenizerLoader
+        )
 
         try Task.checkCancellation()
 
@@ -93,8 +95,11 @@ class HybridEmbeddings: HybridEmbeddingsSpec {
   private func computeEmbeddings(texts: [String]) async throws -> [[Float]] {
     guard let container else { throw EmbeddingsError.notLoaded }
 
-    return await container.perform {
-      (model: EmbeddingModel, tokenizer: Tokenizer, pooling: Pooling) -> [[Float]] in
+    return await container.perform { context in
+      let tokenizer = context.tokenizer
+      let model = context.model
+      let pooling = context.pooling
+
       let inputs = texts.map {
         tokenizer.encode(text: $0, addSpecialTokens: true)
       }
@@ -169,5 +174,57 @@ class HybridEmbeddings: HybridEmbeddingsSpec {
     cachedDimension = 0
     cachedMaxSeqLen = 0
     MLX.Memory.clearCache()
+  }
+}
+
+/// Loads a Hugging Face tokenizer from a local directory and bridges it to
+/// `MLXLMCommon.Tokenizer`. The mlx-swift-lm 3.x API requires an explicit
+/// `TokenizerLoader`; this mirrors the expansion of `#huggingFaceTokenizerLoader()`.
+private struct EmbeddingsTokenizerLoader: TokenizerLoader {
+  func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+    let upstream = try await Tokenizers.AutoTokenizer.from(modelFolder: directory)
+    return EmbeddingsTokenizerBridge(upstream)
+  }
+}
+
+private struct EmbeddingsTokenizerBridge: MLXLMCommon.Tokenizer {
+  private let upstream: any Tokenizers.Tokenizer
+
+  init(_ upstream: any Tokenizers.Tokenizer) {
+    self.upstream = upstream
+  }
+
+  func encode(text: String, addSpecialTokens: Bool) -> [Int] {
+    upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
+  }
+
+  // swift-transformers uses `decode(tokens:)` instead of `decode(tokenIds:)`.
+  func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
+    upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
+  }
+
+  func convertTokenToId(_ token: String) -> Int? {
+    upstream.convertTokenToId(token)
+  }
+
+  func convertIdToToken(_ id: Int) -> String? {
+    upstream.convertIdToToken(id)
+  }
+
+  var bosToken: String? { upstream.bosToken }
+  var eosToken: String? { upstream.eosToken }
+  var unknownToken: String? { upstream.unknownToken }
+
+  func applyChatTemplate(
+    messages: [[String: any Sendable]],
+    tools: [[String: any Sendable]]?,
+    additionalContext: [String: any Sendable]?
+  ) throws -> [Int] {
+    do {
+      return try upstream.applyChatTemplate(
+        messages: messages, tools: tools, additionalContext: additionalContext)
+    } catch Tokenizers.TokenizerError.missingChatTemplate {
+      throw MLXLMCommon.TokenizerError.missingChatTemplate
+    }
   }
 }
