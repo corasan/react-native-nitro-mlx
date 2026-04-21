@@ -24,7 +24,7 @@ Pod::Spec.new do |s|
 
   spm_dependency(s,
     url: "https://github.com/ml-explore/mlx-swift-lm.git",
-    requirement: {kind: "upToNextMinorVersion", minimumVersion: "2.30.3"},
+    requirement: {kind: "upToNextMinorVersion", minimumVersion: "3.31.3"},
     products: ["MLXLLM", "MLXLMCommon"]
   )
 

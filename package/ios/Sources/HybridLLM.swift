@@ -49,7 +49,8 @@ class HybridLLM: HybridLLMSpec {
         totalTime: 0,
         toolExecutionTime: 0
     )
-    private var modelFactory: ModelFactory = LLMModelFactory.shared
+    private var modelFactory: any ModelFactory = LLMModelFactory.shared
+    private let tokenizerLoader: any TokenizerLoader = LocalTokenizerLoader()
     private var manageHistory: Bool = false
     private var seedMessages: [LLMMessage] = []
     private var messageHistory: [LLMMessage] = []
@@ -444,19 +445,19 @@ class HybridLLM: HybridLLMSpec {
                     log("Model not cached, downloading before load: \(modelId)")
                     _ = try await ModelDownloader.shared.download(
                         modelId: modelId,
-                        progressCallback: { _ in }
+                        progressCallback: { fraction in
+                            options?.onProgress?(fraction)
+                        }
                     )
                 }
 
                 let modelDir = await ModelDownloader.shared.getModelDirectory(modelId: modelId)
                 log("Loading from directory: \(modelDir.path)")
 
-                let config = ModelConfiguration(directory: modelDir)
                 let loadedContainer = try await modelFactory.loadContainer(
-                    configuration: config
-                ) { progress in
-                    options?.onProgress?(progress.fractionCompleted)
-                }
+                    from: modelDir,
+                    using: tokenizerLoader
+                )
 
                 try Task.checkCancellation()
 
@@ -1184,5 +1185,57 @@ class HybridLLM: HybridLLMSpec {
         messageHistory = []
         rebuildManagedSession()
         log("Message history cleared")
+    }
+}
+
+/// Loads a Hugging Face tokenizer from a local directory and bridges it to
+/// `MLXLMCommon.Tokenizer`. The mlx-swift-lm 3.x API requires an explicit
+/// `TokenizerLoader`; this mirrors the expansion of `#huggingFaceTokenizerLoader()`.
+private struct LocalTokenizerLoader: TokenizerLoader {
+    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+        let upstream = try await Tokenizers.AutoTokenizer.from(modelFolder: directory)
+        return TokenizerBridge(upstream)
+    }
+}
+
+private struct TokenizerBridge: MLXLMCommon.Tokenizer {
+    private let upstream: any Tokenizers.Tokenizer
+
+    init(_ upstream: any Tokenizers.Tokenizer) {
+        self.upstream = upstream
+    }
+
+    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
+        upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
+    }
+
+    // swift-transformers uses `decode(tokens:)` instead of `decode(tokenIds:)`.
+    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
+        upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
+    }
+
+    func convertTokenToId(_ token: String) -> Int? {
+        upstream.convertTokenToId(token)
+    }
+
+    func convertIdToToken(_ id: Int) -> String? {
+        upstream.convertIdToToken(id)
+    }
+
+    var bosToken: String? { upstream.bosToken }
+    var eosToken: String? { upstream.eosToken }
+    var unknownToken: String? { upstream.unknownToken }
+
+    func applyChatTemplate(
+        messages: [[String: any Sendable]],
+        tools: [[String: any Sendable]]?,
+        additionalContext: [String: any Sendable]?
+    ) throws -> [Int] {
+        do {
+            return try upstream.applyChatTemplate(
+                messages: messages, tools: tools, additionalContext: additionalContext)
+        } catch Tokenizers.TokenizerError.missingChatTemplate {
+            throw MLXLMCommon.TokenizerError.missingChatTemplate
+        }
     }
 }

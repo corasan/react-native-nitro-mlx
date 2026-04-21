@@ -90,6 +90,93 @@ await LLM.stream('Tell me a story', (token) => {
 LLM.stop()
 ```
 
+### Chat Session (high-level API)
+
+For a session-oriented experience that manages structured history, streaming
+state, and tool-call metadata for you, use `createChatSession`:
+
+```typescript
+import { createChatSession, MLXModel } from 'react-native-nitro-mlx'
+
+const chat = createChatSession({
+  modelId: MLXModel.Qwen3_1_7B_4bit,
+  systemPrompt: 'You are a helpful assistant.',
+  tools: [weatherTool],
+  onUpdate: state => {
+    // state.status, state.partialAssistantContent, state.activeToolCalls, ...
+  },
+})
+
+await chat.load({ onProgress: p => console.log(`${(p * 100).toFixed(0)}%`) })
+
+const assistant = await chat.sendMessage('Plan a 3-day trip to Tokyo', {
+  onToken: token => {
+    // append token to UI
+  },
+  onToolCall: call => {
+    // render tool-call card with call.status + call.arguments
+  },
+})
+
+console.log(assistant.content)
+console.log(chat.messages)            // full typed history
+console.log(chat.state.status)        // 'done'
+console.log(chat.state.lastStats)     // GenerationStats from the last turn
+
+chat.reset()                          // clear history, keep system prompt
+chat.unload()                         // release the model
+```
+
+`ChatSession` delegates to the same low-level `LLM` module, so the existing
+`LLM.stream` / `LLM.streamWithEvents` APIs remain available for advanced use
+cases.
+
+#### ChatSessionOptions
+
+| Option | Description |
+|--------|-------------|
+| `modelId` | HuggingFace model id to load |
+| `systemPrompt` | System prompt applied on `load()` |
+| `initialMessages` | Seed messages appended to JS history and forwarded as `additionalContext` (system-role entries stay in JS history only) |
+| `tools` | Tool definitions available to the model |
+| `generationConfig` | Default `LLMGenerationConfig` (temperature, top-p, max tokens, ...) |
+| `contextConfig` | `LLMContextConfig` for managed-history trimming |
+| `tokenBatchSize` | Tokens batched per JS bridge hop |
+| `onUpdate` | Called on every state transition with the latest snapshot |
+| `onMessage` | Called when a user/assistant/tool message is appended to history |
+| `onToken` | Called for each streamed assistant token |
+| `onToolCall` | Called on every tool-call lifecycle update |
+| `onError` | Called when `load()` or `sendMessage()` fails |
+
+#### ChatSession methods
+
+| Method | Description |
+|--------|-------------|
+| `load(options?): Promise<void>` | Load the model, apply system prompt, tools, and initial messages |
+| `sendMessage(text, options?): Promise<AssistantChatMessage>` | Append a user message, stream generation, resolve with the final assistant message |
+| `stop(): void` | Abort the in-flight generation |
+| `reset(): void` | Clear history + transient state; keeps system messages from `initialMessages` |
+| `clearHistory(): void` | Clear user/assistant/tool messages from JS + native history |
+| `setSystemPrompt(prompt): void` | Update the system prompt |
+| `setMessages(messages): void` | Replace JS-side history |
+| `deleteMessage(id): boolean` | Remove a message by id |
+| `updateMessage(id, patch): boolean` | Patch a message by id |
+| `subscribe(listener): () => void` | Subscribe to state updates; returns unsubscribe |
+| `unload(): void` | Unload the model |
+
+#### ChatSessionState
+
+| Field | Description |
+|-------|-------------|
+| `status` | `'idle' \| 'loading' \| 'streaming' \| 'tool_calling' \| 'done' \| 'error'` |
+| `isGenerating` | Whether a turn is in progress |
+| `isLoaded` | Whether the model has been loaded |
+| `partialAssistantContent` | Accumulated assistant content during streaming |
+| `partialAssistantThinking` | Accumulated thinking content during the current thinking block |
+| `activeToolCalls` | Tool calls currently in-flight for the active turn |
+| `lastError` | Last error thrown by `load()` or `sendMessage()` |
+| `lastStats` | Stats from the last completed generation |
+
 ### Text-to-Speech
 
 ```typescript
