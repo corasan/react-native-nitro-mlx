@@ -16,14 +16,11 @@ export interface TTS extends HybridObject<{ ios: 'swift' }> {
   readonly sampleRate: number
 
   load(modelId: string, options?: TTSLoadOptions): Promise<void>
-  generate(
-    text: string,
-    options?: TTSGenerateOptions
-  ): Promise<ArrayBuffer>
+  generate(text: string, options?: TTSGenerateOptions): Promise<ArrayBuffer>
   stream(
     text: string,
     onAudioChunk: (audio: ArrayBuffer) => void,
-    options?: TTSGenerateOptions
+    options?: TTSGenerateOptions,
   ): Promise<void>
   stop(): void
   unload(): void

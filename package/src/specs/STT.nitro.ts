@@ -21,10 +21,7 @@ export interface STT extends HybridObject<{ ios: 'swift' }> {
   load(modelId: string, options?: STTLoadOptions): Promise<void>
 
   transcribe(audio: ArrayBuffer): Promise<string>
-  transcribeStream(
-    audio: ArrayBuffer,
-    onToken: (token: string) => void
-  ): Promise<string>
+  transcribeStream(audio: ArrayBuffer, onToken: (token: string) => void): Promise<string>
 
   startListening(): Promise<void>
   transcribeBuffer(): Promise<string>

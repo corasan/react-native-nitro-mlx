@@ -1,10 +1,12 @@
 import type { EmbeddingsLoadOptions } from './specs/Embeddings.nitro'
 import type { LLMLoadOptions, ToolDefinition } from './specs/LLM.nitro'
-import type { TTSGenerateOptions, TTSLoadOptions } from './specs/TTS.nitro'
 import type { STTLoadOptions } from './specs/STT.nitro'
+import type { TTSGenerateOptions, TTSLoadOptions } from './specs/TTS.nitro'
 
 const ERROR_PREFIX = '[react-native-nitro-mlx]'
-const runtimeConsole = (globalThis as { console?: { error?: (...args: unknown[]) => void } }).console
+const runtimeConsole = (
+  globalThis as { console?: { error?: (...args: unknown[]) => void } }
+).console
 
 function describeType(value: unknown): string {
   if (value === null) {
@@ -73,7 +75,9 @@ function validateToolDefinitions(tools: ToolDefinition[]): ToolDefinition[] {
   return tools.map((tool, index) => {
     const name = assertNonEmptyString(tool?.name, `tools[${index}].name`)
     if (seenNames.has(name)) {
-      throw new TypeError(`${ERROR_PREFIX} tools must have unique names. Duplicate: '${name}'.`)
+      throw new TypeError(
+        `${ERROR_PREFIX} tools must have unique names. Duplicate: '${name}'.`,
+      )
     }
     seenNames.add(name)
 
@@ -85,7 +89,9 @@ function validateToolDefinitions(tools: ToolDefinition[]): ToolDefinition[] {
   })
 }
 
-export function validateLLMLoadOptions(options?: LLMLoadOptions): LLMLoadOptions | undefined {
+export function validateLLMLoadOptions(
+  options?: LLMLoadOptions,
+): LLMLoadOptions | undefined {
   if (!options) {
     return undefined
   }
@@ -103,7 +109,9 @@ export function validateModelDownloadCallback(
   return createSafeCallback('ModelManager.download onProgress', callback)
 }
 
-export function validateSTTLoadOptions(options?: STTLoadOptions): STTLoadOptions | undefined {
+export function validateSTTLoadOptions(
+  options?: STTLoadOptions,
+): STTLoadOptions | undefined {
   if (!options) {
     return undefined
   }
@@ -127,7 +135,9 @@ export function validateEmbeddingsLoadOptions(
   }
 }
 
-export function validateTTSLoadOptions(options?: TTSLoadOptions): TTSLoadOptions | undefined {
+export function validateTTSLoadOptions(
+  options?: TTSLoadOptions,
+): TTSLoadOptions | undefined {
   if (!options) {
     return undefined
   }

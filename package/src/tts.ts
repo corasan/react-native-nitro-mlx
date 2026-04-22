@@ -1,15 +1,15 @@
 import { NitroModules } from 'react-native-nitro-modules'
-import type {
-  TTS as TTSSpec,
-  TTSLoadOptions,
-  TTSGenerateOptions,
-} from './specs/TTS.nitro'
 import {
   assertNonEmptyString,
   createSafeCallback,
   validateTTSGenerateOptions,
   validateTTSLoadOptions,
 } from './runtime'
+import type {
+  TTSGenerateOptions,
+  TTSLoadOptions,
+  TTS as TTSSpec,
+} from './specs/TTS.nitro'
 
 let instance: TTSSpec | null = null
 
@@ -31,10 +31,7 @@ export const TTS = {
     )
   },
 
-  generate(
-    text: string,
-    options?: TTSGenerateOptions
-  ): Promise<ArrayBuffer> {
+  generate(text: string, options?: TTSGenerateOptions): Promise<ArrayBuffer> {
     return getInstance().generate(
       assertNonEmptyString(text, 'TTS text'),
       validateTTSGenerateOptions(options),
@@ -44,7 +41,7 @@ export const TTS = {
   stream(
     text: string,
     onAudioChunk: (audio: ArrayBuffer) => void,
-    options?: TTSGenerateOptions
+    options?: TTSGenerateOptions,
   ): Promise<void> {
     return getInstance().stream(
       assertNonEmptyString(text, 'TTS text'),

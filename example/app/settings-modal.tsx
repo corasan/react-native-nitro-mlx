@@ -88,7 +88,9 @@ export default function SettingsModal() {
                   <Text style={[styles.metricValue, { color: '#FF9500' }]}>
                     {(avgToolTime / 1000).toFixed(1)}s
                   </Text>
-                  <Text style={[styles.metricLabel, { color: textColor }]}>tool execution</Text>
+                  <Text style={[styles.metricLabel, { color: textColor }]}>
+                    tool execution
+                  </Text>
                 </View>
               )}
             </View>

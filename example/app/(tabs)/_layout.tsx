@@ -41,7 +41,10 @@ export default function TabsLayout() {
 
       <NativeTabs.Trigger name="embeddings">
         <NativeTabs.Trigger.Icon
-          sf={{ default: 'point.3.filled.connected.trianglepath.dotted', selected: 'point.3.connected.trianglepath.dotted' }}
+          sf={{
+            default: 'point.3.filled.connected.trianglepath.dotted',
+            selected: 'point.3.connected.trianglepath.dotted',
+          }}
           md="hub"
         />
         <NativeTabs.Trigger.Label>Embed</NativeTabs.Trigger.Label>
