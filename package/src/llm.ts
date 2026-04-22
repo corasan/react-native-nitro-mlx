@@ -1,10 +1,4 @@
 import { NitroModules } from 'react-native-nitro-modules'
-import type {
-  GenerationStats,
-  LLMLoadOptions,
-  LLM as LLMSpec,
-  StreamEvent,
-} from './specs/LLM.nitro'
 import {
   assertBoolean,
   assertNonEmptyString,
@@ -12,6 +6,12 @@ import {
   safeJsonParse,
   validateLLMLoadOptions,
 } from './runtime'
+import type {
+  GenerationStats,
+  LLMLoadOptions,
+  LLM as LLMSpec,
+  StreamEvent,
+} from './specs/LLM.nitro'
 
 export type EventCallback = (event: StreamEvent) => void
 

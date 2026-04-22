@@ -19,9 +19,13 @@ describe('runtime guards', () => {
   })
 
   it('rejects invalid primitive inputs', () => {
-    expect(() => assertNonEmptyString('   ', 'modelId')).toThrow('must be a non-empty string')
+    expect(() => assertNonEmptyString('   ', 'modelId')).toThrow(
+      'must be a non-empty string',
+    )
     expect(() => assertBoolean('true', 'debug')).toThrow('must be a boolean')
-    expect(() => assertArrayBuffer(new ArrayBuffer(0), 'audio')).toThrow('must not be empty')
+    expect(() => assertArrayBuffer(new ArrayBuffer(0), 'audio')).toThrow(
+      'must not be empty',
+    )
   })
 
   it('wraps callbacks so user exceptions do not escape', () => {

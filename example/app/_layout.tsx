@@ -15,10 +15,7 @@ export default function RootLayout() {
     <BenchmarkProvider>
       <KeyboardProvider>
         <Stack>
-          <Stack.Screen
-            name="(tabs)"
-            options={{ headerShown: false }}
-          />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
             name="download-modal"
             options={{
