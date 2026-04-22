@@ -23,6 +23,34 @@ enum ModelDownloadError: LocalizedError {
     }
 }
 
+private actor ProgressAggregator {
+    private var writtenBytes: [String: Int64] = [:]
+    private let baseBytes: Int64
+    private let totalBytes: Int64
+    private let onProgress: (Double) -> Void
+
+    init(baseBytes: Int64, totalBytes: Int64, onProgress: @escaping (Double) -> Void) {
+        self.baseBytes = baseBytes
+        self.totalBytes = totalBytes
+        self.onProgress = onProgress
+    }
+
+    func update(file: String, bytes: Int64) {
+        writtenBytes[file] = bytes
+        emit()
+    }
+
+    func emit() {
+        guard totalBytes > 0 else { return }
+        let total = writtenBytes.values.reduce(0, +) + baseBytes
+        onProgress(min(1.0, Double(total) / Double(totalBytes)))
+    }
+}
+
+private final class ProgressObservationBox: @unchecked Sendable {
+    var observation: NSKeyValueObservation?
+}
+
 actor ModelDownloader: NSObject {
     static let shared = ModelDownloader()
     static var debug: Bool = false
@@ -150,6 +178,27 @@ actor ModelDownloader: NSObject {
         return size.int64Value > 0
     }
 
+    private struct PendingDownload: Sendable {
+        let file: String
+        let destURL: URL
+        let url: URL
+        var expectedBytes: Int64
+    }
+
+    private func fetchContentLength(url: URL) async -> Int64 {
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.expectedContentLength > 0 {
+                return httpResponse.expectedContentLength
+            }
+        } catch {
+            // best-effort; fall back to 0 if unavailable
+        }
+        return 0
+    }
+
     func download(
         modelId: String,
         progressCallback: @escaping (Double) -> Void
@@ -170,19 +219,12 @@ actor ModelDownloader: NSObject {
         log("Model directory: \(modelDir.path)")
         log("Files to download: \(files)")
 
-        var downloaded = 0
+        var pending: [PendingDownload] = []
+        var baseBytes: Int64 = 0
 
         for file in files {
             let destURL = modelDir.appendingPathComponent(file)
-            let parentDir = destURL.deletingLastPathComponent()
-            try fileManager.createDirectory(at: parentDir, withIntermediateDirectories: true)
-
-            if isExistingFileValid(at: destURL) {
-                log("File exists, skipping: \(file)")
-                downloaded += 1
-                progressCallback(Double(downloaded) / Double(files.count))
-                continue
-            }
+            try fileManager.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
             let urlString = "https://huggingface.co/\(modelId)/resolve/main/\(file)"
             guard let url = URL(string: urlString) else {
@@ -190,32 +232,125 @@ actor ModelDownloader: NSObject {
                 continue
             }
 
-            log("Downloading: \(file)")
+            if isExistingFileValid(at: destURL) {
+                log("File exists, skipping: \(file)")
+                let size = (try? fileManager.attributesOfItem(atPath: destURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+                baseBytes += size
+            } else {
+                pending.append(PendingDownload(file: file, destURL: destURL, url: url, expectedBytes: 0))
+            }
+        }
 
-            let (tempURL, response) = try await URLSession.shared.download(from: url)
+        // Prefetch expected sizes in parallel so progress is byte-accurate.
+        if !pending.isEmpty {
+            await withTaskGroup(of: (Int, Int64).self) { group in
+                for (index, p) in pending.enumerated() {
+                    let url = p.url
+                    group.addTask { (index, await self.fetchContentLength(url: url)) }
+                }
+                for await (index, bytes) in group {
+                    pending[index].expectedBytes = bytes
+                }
+            }
+        }
 
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw ModelDownloadError.invalidModelMetadata(modelId)
+        let totalBytes = baseBytes + pending.map(\.expectedBytes).reduce(0, +)
+
+        let aggregator = ProgressAggregator(
+            baseBytes: baseBytes,
+            totalBytes: totalBytes,
+            onProgress: progressCallback
+        )
+        await aggregator.emit()
+
+        // Download with bounded concurrency so progress streams smoothly for large files.
+        let maxConcurrency = 4
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            var iterator = pending.makeIterator()
+            var inFlight = 0
+
+            while inFlight < maxConcurrency, let next = iterator.next() {
+                group.addTask { try await self.performDownload(next, modelId: modelId, aggregator: aggregator) }
+                inFlight += 1
             }
 
-            log("Response status: \(httpResponse.statusCode) for \(file)")
-
-            guard httpResponse.statusCode == 200 else {
-                throw ModelDownloadError.invalidResponse(statusCode: httpResponse.statusCode, file: file)
+            while try await group.next() != nil {
+                if let next = iterator.next() {
+                    group.addTask { try await self.performDownload(next, modelId: modelId, aggregator: aggregator) }
+                }
             }
-
-            if fileManager.fileExists(atPath: destURL.path) {
-                try fileManager.removeItem(at: destURL)
-            }
-            try fileManager.moveItem(at: tempURL, to: destURL)
-            log("Saved: \(file)")
-
-            downloaded += 1
-            progressCallback(Double(downloaded) / Double(files.count))
         }
 
         try writeManifest(modelId: modelId, files: files, to: modelDir)
+        progressCallback(1.0)
         return modelDir
+    }
+
+    private func performDownload(
+        _ pending: PendingDownload,
+        modelId: String,
+        aggregator: ProgressAggregator
+    ) async throws {
+        log("Downloading: \(pending.file)")
+
+        let file = pending.file
+        let observationBox = ProgressObservationBox()
+        defer { observationBox.observation?.invalidate() }
+
+        let (tempURL, response): (URL, URLResponse) = try await withCheckedThrowingContinuation { continuation in
+            let task = URLSession.shared.downloadTask(with: pending.url) { tempURL, response, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                guard let tempURL, let response else {
+                    continuation.resume(throwing: URLError(.badServerResponse))
+                    return
+                }
+                // The system deletes tempURL after this closure returns, so preserve it now.
+                let preservedURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("mlx-download-\(UUID().uuidString)")
+                do {
+                    try FileManager.default.moveItem(at: tempURL, to: preservedURL)
+                    continuation.resume(returning: (preservedURL, response))
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+
+            // Observe the task's real byte counter. task.progress uses 0-100 unit counts
+            // (not bytes) for downloads; countOfBytesReceived is the actual byte count.
+            observationBox.observation = task.observe(\.countOfBytesReceived, options: [.new]) { task, _ in
+                let bytes = task.countOfBytesReceived
+                Task { await aggregator.update(file: file, bytes: bytes) }
+            }
+
+            task.resume()
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            try? fileManager.removeItem(at: tempURL)
+            throw ModelDownloadError.invalidModelMetadata(modelId)
+        }
+
+        log("Response status: \(httpResponse.statusCode) for \(pending.file)")
+
+        guard httpResponse.statusCode == 200 else {
+            try? fileManager.removeItem(at: tempURL)
+            throw ModelDownloadError.invalidResponse(statusCode: httpResponse.statusCode, file: pending.file)
+        }
+
+        if fileManager.fileExists(atPath: pending.destURL.path) {
+            try fileManager.removeItem(at: pending.destURL)
+        }
+        try fileManager.moveItem(at: tempURL, to: pending.destURL)
+        log("Saved: \(pending.file)")
+
+        // Ensure final byte count matches expected (avoids drift if the delegate under-reports).
+        if pending.expectedBytes > 0 {
+            await aggregator.update(file: pending.file, bytes: pending.expectedBytes)
+        }
     }
 
     func isDownloaded(modelId: String) -> Bool {

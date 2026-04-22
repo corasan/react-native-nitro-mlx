@@ -19,7 +19,9 @@ export default function DownloadModal() {
       try {
         setStatus('Downloading model...')
         await ModelManager.download(MODEL_ID, p => {
-          setProgress(p)
+          // Byte-level progress fires very frequently during large downloads;
+          // only re-render on visible changes (>=0.5%) or on completion.
+          setProgress(prev => (p >= 1 || p - prev >= 0.005 ? p : prev))
         })
         setStatus('Download complete!')
         setTimeout(() => {
