@@ -10,8 +10,12 @@
 // Forward declarations of C++ defined types
 // Forward declaration of `ArrayBufferHolder` to properly resolve imports.
 namespace NitroModules { class ArrayBufferHolder; }
+// Forward declaration of `EmbeddingsLoadOptions` to properly resolve imports.
+namespace margelo::nitro::mlxreactnative { struct EmbeddingsLoadOptions; }
 // Forward declaration of `GenerationStats` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { struct GenerationStats; }
+// Forward declaration of `HybridEmbeddingsSpec` to properly resolve imports.
+namespace margelo::nitro::mlxreactnative { class HybridEmbeddingsSpec; }
 // Forward declaration of `HybridLLMSpec` to properly resolve imports.
 namespace margelo::nitro::mlxreactnative { class HybridLLMSpec; }
 // Forward declaration of `HybridModelManagerSpec` to properly resolve imports.
@@ -40,6 +44,8 @@ namespace margelo::nitro::mlxreactnative { struct ToolDefinition; }
 namespace margelo::nitro::mlxreactnative { struct ToolParameter; }
 
 // Forward declarations of Swift defined types
+// Forward declaration of `HybridEmbeddingsSpec_cxx` to properly resolve imports.
+namespace MLXReactNative { class HybridEmbeddingsSpec_cxx; }
 // Forward declaration of `HybridLLMSpec_cxx` to properly resolve imports.
 namespace MLXReactNative { class HybridLLMSpec_cxx; }
 // Forward declaration of `HybridModelManagerSpec_cxx` to properly resolve imports.
@@ -50,7 +56,9 @@ namespace MLXReactNative { class HybridSTTSpec_cxx; }
 namespace MLXReactNative { class HybridTTSSpec_cxx; }
 
 // Include C++ defined types
+#include "EmbeddingsLoadOptions.hpp"
 #include "GenerationStats.hpp"
+#include "HybridEmbeddingsSpec.hpp"
 #include "HybridLLMSpec.hpp"
 #include "HybridModelManagerSpec.hpp"
 #include "HybridSTTSpec.hpp"
@@ -174,6 +182,159 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
   }
   inline std::function<void(double /* progress */)> get_std__optional_std__function_void_double____progress______(const std::optional<std::function<void(double /* progress */)>>& optional) noexcept {
     return optional.value();
+  }
+  
+  // pragma MARK: std::optional<EmbeddingsLoadOptions>
+  /**
+   * Specialized version of `std::optional<EmbeddingsLoadOptions>`.
+   */
+  using std__optional_EmbeddingsLoadOptions_ = std::optional<EmbeddingsLoadOptions>;
+  inline std::optional<EmbeddingsLoadOptions> create_std__optional_EmbeddingsLoadOptions_(const EmbeddingsLoadOptions& value) noexcept {
+    return std::optional<EmbeddingsLoadOptions>(value);
+  }
+  inline bool has_value_std__optional_EmbeddingsLoadOptions_(const std::optional<EmbeddingsLoadOptions>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline EmbeddingsLoadOptions get_std__optional_EmbeddingsLoadOptions_(const std::optional<EmbeddingsLoadOptions>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>
+  /**
+   * Specialized version of `std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>`.
+   */
+  using std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer___ = std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>;
+  inline std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> create_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer___() noexcept {
+    return Promise<std::shared_ptr<ArrayBuffer>>::create();
+  }
+  inline PromiseHolder<std::shared_ptr<ArrayBuffer>> wrap_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer___(std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> promise) noexcept {
+    return PromiseHolder<std::shared_ptr<ArrayBuffer>>(std::move(promise));
+  }
+  
+  // pragma MARK: std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>
+  /**
+   * Specialized version of `std::function<void(const std::shared_ptr<ArrayBuffer>&)>`.
+   */
+  using Func_void_std__shared_ptr_ArrayBuffer_ = std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>;
+  /**
+   * Wrapper class for a `std::function<void(const std::shared_ptr<ArrayBuffer>& / * result * /)>`, this can be used from Swift.
+   */
+  class Func_void_std__shared_ptr_ArrayBuffer__Wrapper final {
+  public:
+    explicit Func_void_std__shared_ptr_ArrayBuffer__Wrapper(std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>&& func): _function(std::make_unique<std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>>(std::move(func))) {}
+    inline void call(ArrayBufferHolder result) const noexcept {
+      _function->operator()(result.getArrayBuffer());
+    }
+  private:
+    std::unique_ptr<std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_std__shared_ptr_ArrayBuffer_ create_Func_void_std__shared_ptr_ArrayBuffer_(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_std__shared_ptr_ArrayBuffer__Wrapper wrap_Func_void_std__shared_ptr_ArrayBuffer_(Func_void_std__shared_ptr_ArrayBuffer_ value) noexcept {
+    return Func_void_std__shared_ptr_ArrayBuffer__Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::vector<std::shared_ptr<ArrayBuffer>>
+  /**
+   * Specialized version of `std::vector<std::shared_ptr<ArrayBuffer>>`.
+   */
+  using std__vector_std__shared_ptr_ArrayBuffer__ = std::vector<std::shared_ptr<ArrayBuffer>>;
+  inline std::vector<std::shared_ptr<ArrayBuffer>> create_std__vector_std__shared_ptr_ArrayBuffer__(size_t size) noexcept {
+    std::vector<std::shared_ptr<ArrayBuffer>> vector;
+    vector.reserve(size);
+    return vector;
+  }
+  
+  // pragma MARK: std::shared_ptr<Promise<std::vector<std::shared_ptr<ArrayBuffer>>>>
+  /**
+   * Specialized version of `std::shared_ptr<Promise<std::vector<std::shared_ptr<ArrayBuffer>>>>`.
+   */
+  using std__shared_ptr_Promise_std__vector_std__shared_ptr_ArrayBuffer____ = std::shared_ptr<Promise<std::vector<std::shared_ptr<ArrayBuffer>>>>;
+  inline std::shared_ptr<Promise<std::vector<std::shared_ptr<ArrayBuffer>>>> create_std__shared_ptr_Promise_std__vector_std__shared_ptr_ArrayBuffer____() noexcept {
+    return Promise<std::vector<std::shared_ptr<ArrayBuffer>>>::create();
+  }
+  inline PromiseHolder<std::vector<std::shared_ptr<ArrayBuffer>>> wrap_std__shared_ptr_Promise_std__vector_std__shared_ptr_ArrayBuffer____(std::shared_ptr<Promise<std::vector<std::shared_ptr<ArrayBuffer>>>> promise) noexcept {
+    return PromiseHolder<std::vector<std::shared_ptr<ArrayBuffer>>>(std::move(promise));
+  }
+  
+  // pragma MARK: std::function<void(const std::vector<std::shared_ptr<ArrayBuffer>>& /* result */)>
+  /**
+   * Specialized version of `std::function<void(const std::vector<std::shared_ptr<ArrayBuffer>>&)>`.
+   */
+  using Func_void_std__vector_std__shared_ptr_ArrayBuffer__ = std::function<void(const std::vector<std::shared_ptr<ArrayBuffer>>& /* result */)>;
+  /**
+   * Wrapper class for a `std::function<void(const std::vector<std::shared_ptr<ArrayBuffer>>& / * result * /)>`, this can be used from Swift.
+   */
+  class Func_void_std__vector_std__shared_ptr_ArrayBuffer___Wrapper final {
+  public:
+    explicit Func_void_std__vector_std__shared_ptr_ArrayBuffer___Wrapper(std::function<void(const std::vector<std::shared_ptr<ArrayBuffer>>& /* result */)>&& func): _function(std::make_unique<std::function<void(const std::vector<std::shared_ptr<ArrayBuffer>>& /* result */)>>(std::move(func))) {}
+    inline void call(std::vector<std::shared_ptr<ArrayBuffer>> result) const noexcept {
+      _function->operator()(result);
+    }
+  private:
+    std::unique_ptr<std::function<void(const std::vector<std::shared_ptr<ArrayBuffer>>& /* result */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_std__vector_std__shared_ptr_ArrayBuffer__ create_Func_void_std__vector_std__shared_ptr_ArrayBuffer__(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_std__vector_std__shared_ptr_ArrayBuffer___Wrapper wrap_Func_void_std__vector_std__shared_ptr_ArrayBuffer__(Func_void_std__vector_std__shared_ptr_ArrayBuffer__ value) noexcept {
+    return Func_void_std__vector_std__shared_ptr_ArrayBuffer___Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::vector<std::string>
+  /**
+   * Specialized version of `std::vector<std::string>`.
+   */
+  using std__vector_std__string_ = std::vector<std::string>;
+  inline std::vector<std::string> create_std__vector_std__string_(size_t size) noexcept {
+    std::vector<std::string> vector;
+    vector.reserve(size);
+    return vector;
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridEmbeddingsSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridEmbeddingsSpec>`.
+   */
+  using std__shared_ptr_HybridEmbeddingsSpec_ = std::shared_ptr<HybridEmbeddingsSpec>;
+  std::shared_ptr<HybridEmbeddingsSpec> create_std__shared_ptr_HybridEmbeddingsSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridEmbeddingsSpec_(std__shared_ptr_HybridEmbeddingsSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridEmbeddingsSpec>
+  using std__weak_ptr_HybridEmbeddingsSpec_ = std::weak_ptr<HybridEmbeddingsSpec>;
+  inline std__weak_ptr_HybridEmbeddingsSpec_ weakify_std__shared_ptr_HybridEmbeddingsSpec_(const std::shared_ptr<HybridEmbeddingsSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<std::shared_ptr<Promise<void>>>
+  using Result_std__shared_ptr_Promise_void___ = Result<std::shared_ptr<Promise<void>>>;
+  inline Result_std__shared_ptr_Promise_void___ create_Result_std__shared_ptr_Promise_void___(const std::shared_ptr<Promise<void>>& value) noexcept {
+    return Result<std::shared_ptr<Promise<void>>>::withValue(value);
+  }
+  inline Result_std__shared_ptr_Promise_void___ create_Result_std__shared_ptr_Promise_void___(const std::exception_ptr& error) noexcept {
+    return Result<std::shared_ptr<Promise<void>>>::withError(error);
+  }
+  
+  // pragma MARK: Result<void>
+  using Result_void_ = Result<void>;
+  inline Result_void_ create_Result_void_() noexcept {
+    return Result<void>::withValue();
+  }
+  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
+    return Result<void>::withError(error);
+  }
+  
+  // pragma MARK: Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>
+  using Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____ = Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>;
+  inline Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____ create_Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____(const std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>& value) noexcept {
+    return Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>::withValue(value);
+  }
+  inline Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____ create_Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____(const std::exception_ptr& error) noexcept {
+    return Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>::withError(error);
+  }
+  
+  // pragma MARK: Result<std::shared_ptr<Promise<std::vector<std::shared_ptr<ArrayBuffer>>>>>
+  using Result_std__shared_ptr_Promise_std__vector_std__shared_ptr_ArrayBuffer_____ = Result<std::shared_ptr<Promise<std::vector<std::shared_ptr<ArrayBuffer>>>>>;
+  inline Result_std__shared_ptr_Promise_std__vector_std__shared_ptr_ArrayBuffer_____ create_Result_std__shared_ptr_Promise_std__vector_std__shared_ptr_ArrayBuffer_____(const std::shared_ptr<Promise<std::vector<std::shared_ptr<ArrayBuffer>>>>& value) noexcept {
+    return Result<std::shared_ptr<Promise<std::vector<std::shared_ptr<ArrayBuffer>>>>>::withValue(value);
+  }
+  inline Result_std__shared_ptr_Promise_std__vector_std__shared_ptr_ArrayBuffer_____ create_Result_std__shared_ptr_Promise_std__vector_std__shared_ptr_ArrayBuffer_____(const std::exception_ptr& error) noexcept {
+    return Result<std::shared_ptr<Promise<std::vector<std::shared_ptr<ArrayBuffer>>>>>::withError(error);
   }
   
   // pragma MARK: std::vector<LLMMessage>
@@ -488,15 +649,6 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
   using std__weak_ptr_HybridLLMSpec_ = std::weak_ptr<HybridLLMSpec>;
   inline std__weak_ptr_HybridLLMSpec_ weakify_std__shared_ptr_HybridLLMSpec_(const std::shared_ptr<HybridLLMSpec>& strong) noexcept { return strong; }
   
-  // pragma MARK: Result<std::shared_ptr<Promise<void>>>
-  using Result_std__shared_ptr_Promise_void___ = Result<std::shared_ptr<Promise<void>>>;
-  inline Result_std__shared_ptr_Promise_void___ create_Result_std__shared_ptr_Promise_void___(const std::shared_ptr<Promise<void>>& value) noexcept {
-    return Result<std::shared_ptr<Promise<void>>>::withValue(value);
-  }
-  inline Result_std__shared_ptr_Promise_void___ create_Result_std__shared_ptr_Promise_void___(const std::exception_ptr& error) noexcept {
-    return Result<std::shared_ptr<Promise<void>>>::withError(error);
-  }
-  
   // pragma MARK: Result<std::shared_ptr<Promise<std::string>>>
   using Result_std__shared_ptr_Promise_std__string___ = Result<std::shared_ptr<Promise<std::string>>>;
   inline Result_std__shared_ptr_Promise_std__string___ create_Result_std__shared_ptr_Promise_std__string___(const std::shared_ptr<Promise<std::string>>& value) noexcept {
@@ -504,15 +656,6 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
   }
   inline Result_std__shared_ptr_Promise_std__string___ create_Result_std__shared_ptr_Promise_std__string___(const std::exception_ptr& error) noexcept {
     return Result<std::shared_ptr<Promise<std::string>>>::withError(error);
-  }
-  
-  // pragma MARK: Result<void>
-  using Result_void_ = Result<void>;
-  inline Result_void_ create_Result_void_() noexcept {
-    return Result<void>::withValue();
-  }
-  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
-    return Result<void>::withError(error);
   }
   
   // pragma MARK: Result<GenerationStats>
@@ -565,17 +708,6 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
   Func_void_bool create_Func_void_bool(void* NON_NULL swiftClosureWrapper) noexcept;
   inline Func_void_bool_Wrapper wrap_Func_void_bool(Func_void_bool value) noexcept {
     return Func_void_bool_Wrapper(std::move(value));
-  }
-  
-  // pragma MARK: std::vector<std::string>
-  /**
-   * Specialized version of `std::vector<std::string>`.
-   */
-  using std__vector_std__string_ = std::vector<std::string>;
-  inline std::vector<std::string> create_std__vector_std__string_(size_t size) noexcept {
-    std::vector<std::string> vector;
-    vector.reserve(size);
-    return vector;
   }
   
   // pragma MARK: std::shared_ptr<Promise<std::vector<std::string>>>
@@ -684,40 +816,6 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
     return optional.value();
   }
   
-  // pragma MARK: std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>
-  /**
-   * Specialized version of `std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>`.
-   */
-  using std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer___ = std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>;
-  inline std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> create_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer___() noexcept {
-    return Promise<std::shared_ptr<ArrayBuffer>>::create();
-  }
-  inline PromiseHolder<std::shared_ptr<ArrayBuffer>> wrap_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer___(std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>> promise) noexcept {
-    return PromiseHolder<std::shared_ptr<ArrayBuffer>>(std::move(promise));
-  }
-  
-  // pragma MARK: std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>
-  /**
-   * Specialized version of `std::function<void(const std::shared_ptr<ArrayBuffer>&)>`.
-   */
-  using Func_void_std__shared_ptr_ArrayBuffer_ = std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>;
-  /**
-   * Wrapper class for a `std::function<void(const std::shared_ptr<ArrayBuffer>& / * result * /)>`, this can be used from Swift.
-   */
-  class Func_void_std__shared_ptr_ArrayBuffer__Wrapper final {
-  public:
-    explicit Func_void_std__shared_ptr_ArrayBuffer__Wrapper(std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>&& func): _function(std::make_unique<std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>>(std::move(func))) {}
-    inline void call(ArrayBufferHolder result) const noexcept {
-      _function->operator()(result.getArrayBuffer());
-    }
-  private:
-    std::unique_ptr<std::function<void(const std::shared_ptr<ArrayBuffer>& /* result */)>> _function;
-  } SWIFT_NONCOPYABLE;
-  Func_void_std__shared_ptr_ArrayBuffer_ create_Func_void_std__shared_ptr_ArrayBuffer_(void* NON_NULL swiftClosureWrapper) noexcept;
-  inline Func_void_std__shared_ptr_ArrayBuffer__Wrapper wrap_Func_void_std__shared_ptr_ArrayBuffer_(Func_void_std__shared_ptr_ArrayBuffer_ value) noexcept {
-    return Func_void_std__shared_ptr_ArrayBuffer__Wrapper(std::move(value));
-  }
-  
   // pragma MARK: std::optional<std::string>
   /**
    * Specialized version of `std::optional<std::string>`.
@@ -759,14 +857,5 @@ namespace margelo::nitro::mlxreactnative::bridge::swift {
   // pragma MARK: std::weak_ptr<HybridTTSSpec>
   using std__weak_ptr_HybridTTSSpec_ = std::weak_ptr<HybridTTSSpec>;
   inline std__weak_ptr_HybridTTSSpec_ weakify_std__shared_ptr_HybridTTSSpec_(const std::shared_ptr<HybridTTSSpec>& strong) noexcept { return strong; }
-  
-  // pragma MARK: Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>
-  using Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____ = Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>;
-  inline Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____ create_Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____(const std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>& value) noexcept {
-    return Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>::withValue(value);
-  }
-  inline Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____ create_Result_std__shared_ptr_Promise_std__shared_ptr_ArrayBuffer____(const std::exception_ptr& error) noexcept {
-    return Result<std::shared_ptr<Promise<std::shared_ptr<ArrayBuffer>>>>::withError(error);
-  }
 
 } // namespace margelo::nitro::mlxreactnative::bridge::swift

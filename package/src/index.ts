@@ -17,6 +17,7 @@ export {
   type ToolChatMessage,
   type UserChatMessage,
 } from './chat'
+export { cosineSimilarity, Embeddings } from './embeddings'
 export {
   type EventCallback,
   LLM,
@@ -34,6 +35,10 @@ export {
   type ModelQuantization,
   type ModelType,
 } from './models'
+export type {
+  Embeddings as EmbeddingsSpec,
+  EmbeddingsLoadOptions,
+} from './specs/Embeddings.nitro'
 export type {
   GenerationEndEvent,
   GenerationStartEvent,

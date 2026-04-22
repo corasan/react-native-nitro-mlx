@@ -38,6 +38,14 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'mic', selected: 'mic.fill' }} md="mic" />
         <NativeTabs.Trigger.Label>STT</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="embeddings">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'point.3.filled.connected.trianglepath.dotted', selected: 'point.3.connected.trianglepath.dotted' }}
+          md="hub"
+        />
+        <NativeTabs.Trigger.Label>Embed</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
     </NativeTabs>
   )
 }
