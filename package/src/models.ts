@@ -7,6 +7,7 @@ export enum ModelFamily {
   OpenELM = 'OpenELM',
   PocketTTS = 'PocketTTS',
   GLMASR = 'GLMASR',
+  Qwen3ASR = 'Qwen3ASR',
 }
 
 export enum ModelProvider {
@@ -86,6 +87,9 @@ export enum MLXModel {
 
   // GLM-ASR (GLMASR) - Speech-to-Text
   GLM_ASR_Nano_4bit = 'mlx-community/GLM-ASR-Nano-2512-4bit',
+
+  // Qwen3-ASR (Alibaba) - Speech-to-Text
+  Qwen3_ASR_0_6B_4bit = 'mlx-community/Qwen3-ASR-0.6B-4bit',
 }
 
 export const MLXModels: ModelInfo[] = [
@@ -387,6 +391,16 @@ export const MLXModels: ModelInfo[] = [
     quantization: '4bit',
     displayName: 'GLM-ASR Nano (4-bit)',
     downloadSize: 600000000,
+    type: 'stt',
+  },
+  {
+    id: MLXModel.Qwen3_ASR_0_6B_4bit,
+    family: ModelFamily.Qwen3ASR,
+    provider: ModelProvider.Alibaba,
+    parameters: '0.6B',
+    quantization: '4bit',
+    displayName: 'Qwen3 ASR 0.6B (4-bit)',
+    downloadSize: 712781278,
     type: 'stt',
   },
 ]
