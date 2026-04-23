@@ -12,7 +12,7 @@ import {
 import { MLXModel, STT } from 'react-native-nitro-mlx'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-const MODEL_ID = MLXModel.GLM_ASR_Nano_4bit
+const MODEL_ID = MLXModel.Qwen3_ASR_0_6B_4bit
 
 type Status = 'idle' | 'loading' | 'ready' | 'listening' | 'transcribing'
 
@@ -71,8 +71,8 @@ export default function STTScreen() {
         streamingRef.current = `${streamingRef.current} ${text}`.trim()
         setStreamingText(streamingRef.current)
       }
-    } catch {
-      // buffer too small or not listening, skip
+    } catch (error) {
+      console.warn('STT transcribeBuffer error:', error)
     } finally {
       isTranscribingChunk.current = false
     }
@@ -84,19 +84,16 @@ export default function STTScreen() {
 
   const handleToggleListening = useCallback(async () => {
     if (status === 'listening') {
+      stopPolling()
       try {
-        stopPolling()
-        setStatus('transcribing')
-        const finalText = await STT.stopListening()
-        const combined = `${streamingRef.current} ${finalText ?? ''}`.trim()
-        setTranscript(combined || streamingRef.current)
-        setStreamingText('')
-        streamingRef.current = ''
-        setStatus('ready')
+        STT.stop()
       } catch (error) {
-        console.error('STT stopListening error:', error)
-        setStatus('ready')
+        console.error('STT stop error:', error)
       }
+      setTranscript(streamingRef.current)
+      setStreamingText('')
+      streamingRef.current = ''
+      setStatus('ready')
     } else if (status === 'ready') {
       setTranscript('')
       setStreamingText('')

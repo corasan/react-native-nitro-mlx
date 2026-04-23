@@ -11,7 +11,7 @@ enum STTError: Error {
 }
 
 class HybridSTT: HybridSTTSpec {
-  private var model: GLMASRModel?
+  private var model: Qwen3ASRModel?
   private var activeTask: Task<String, Error>?
   private var loadTask: Task<Void, Error>?
   private var captureManager: AudioCaptureManager?
@@ -39,7 +39,7 @@ class HybridSTT: HybridSTTSpec {
         self.model = nil
         MLX.Memory.clearCache()
 
-        let loadedModel = try await GLMASRModel.fromPretrained(modelId)
+        let loadedModel = try await Qwen3ASRModel.fromPretrained(modelId)
 
         try Task.checkCancellation()
 
@@ -62,7 +62,7 @@ class HybridSTT: HybridSTTSpec {
     return Promise.async { [self] in
       let task = Task<String, Error> {
         let mlxAudio = self.arrayBufferToMLXArray(audio)
-        let output = model.generate(audio: mlxAudio)
+        let output = model.generate(audio: mlxAudio, language: "English")
         return output.text
       }
 
@@ -84,7 +84,7 @@ class HybridSTT: HybridSTTSpec {
     return Promise.async { [self] in
       let task = Task<String, Error> {
         let mlxAudio = self.arrayBufferToMLXArray(audio)
-        let stream = model.generateStream(audio: mlxAudio)
+        let stream = model.generateStream(audio: mlxAudio, language: "English")
         var finalText = ""
 
         for try await event in stream {
@@ -138,7 +138,7 @@ class HybridSTT: HybridSTTSpec {
 
     return Promise.async { [self] in
       let task = Task<String, Error> {
-        let output = model.generate(audio: audio)
+        let output = model.generate(audio: audio, language: "English")
         return output.text
       }
 
@@ -164,7 +164,7 @@ class HybridSTT: HybridSTTSpec {
 
     return Promise.async { [self] in
       let task = Task<String, Error> {
-        let output = model.generate(audio: audio)
+        let output = model.generate(audio: audio, language: "English")
         return output.text
       }
 

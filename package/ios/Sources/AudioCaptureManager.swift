@@ -84,6 +84,18 @@ class AudioCaptureManager {
     bufferLock.unlock()
 
     guard samples.count >= 8000 else { return nil }
+
+    // Silence gate: skip chunks whose peak amplitude is near the noise
+    // floor so the ASR model doesn't hallucinate ("The.", "...") on
+    // silence. Peak-based because measurement-mode capture disables AGC,
+    // making RMS of quiet speech close to ambient noise.
+    var peak: Float = 0
+    for s in samples {
+      let a = s < 0 ? -s : s
+      if a > peak { peak = a }
+    }
+    guard peak >= 0.005 else { return nil }
+
     return MLXArray(samples)
   }
 
