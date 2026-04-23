@@ -68,8 +68,8 @@ export default function STTScreen() {
     try {
       const text = await STT.transcribeBuffer()
       if (text) {
-        streamingRef.current = text
-        setStreamingText(text)
+        streamingRef.current = `${streamingRef.current} ${text}`.trim()
+        setStreamingText(streamingRef.current)
       }
     } catch {
       // buffer too small or not listening, skip
@@ -88,7 +88,8 @@ export default function STTScreen() {
         stopPolling()
         setStatus('transcribing')
         const finalText = await STT.stopListening()
-        setTranscript(finalText || streamingRef.current)
+        const combined = `${streamingRef.current} ${finalText ?? ''}`.trim()
+        setTranscript(combined || streamingRef.current)
         setStreamingText('')
         streamingRef.current = ''
         setStatus('ready')

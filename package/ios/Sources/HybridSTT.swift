@@ -132,7 +132,7 @@ class HybridSTT: HybridSTTSpec {
     guard let manager = captureManager, manager.isCapturing else {
       throw STTError.notListening
     }
-    guard let audio = manager.snapshot() else {
+    guard let audio = manager.snapshotAndClear() else {
       return Promise.resolved(withResult: "")
     }
 
