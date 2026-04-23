@@ -59,7 +59,7 @@ class HybridLLM: HybridLLMSpec {
     private var tools: [ToolDefinition] = []
     private var toolSchemas: [ToolSpec] = []
     private var generationParameters: GenerateParameters = GenerateParameters()
-    private var tokenBatchSize: Int = 1
+    private var tokenBatchSize: Int = 4
     private var contextConfig: LLMContextConfig?
 
     var isLoaded: Bool { container != nil }
@@ -432,7 +432,7 @@ class HybridLLM: HybridLLMSpec {
                 messageHistory = []
                 manageHistory = false
                 generationParameters = GenerateParameters()
-                tokenBatchSize = 1
+                tokenBatchSize = 4
                 contextConfig = nil
                 self.modelId = ""
                 Memory.clearCache()
@@ -472,7 +472,7 @@ class HybridLLM: HybridLLMSpec {
                 }
 
                 generationParameters = buildGenerateParameters(from: options?.generationConfig)
-                tokenBatchSize = normalizedInt(options?.tokenBatchSize, minimum: 1) ?? 1
+                tokenBatchSize = normalizedInt(options?.tokenBatchSize, minimum: 1) ?? 4
                 contextConfig = options?.contextConfig
 
                 self.container = loadedContainer
@@ -1162,7 +1162,7 @@ class HybridLLM: HybridLLMSpec {
         messageHistory = []
         manageHistory = false
         generationParameters = GenerateParameters()
-        tokenBatchSize = 1
+        tokenBatchSize = 4
         contextConfig = nil
         modelId = ""
 
