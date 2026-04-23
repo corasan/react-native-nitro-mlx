@@ -88,9 +88,21 @@ class AudioCaptureManager {
   }
 
   func snapshot() -> MLXArray? {
+    // Take exclusive ownership of the accumulated buffer so the audio tap
+    // gets fresh empty storage to append into; the expensive MLXArray copy
+    // then happens off the audio path. Samples are merged back afterward
+    // so the buffer keeps accumulating across calls.
     bufferLock.lock()
-    let samples = audioBuffer
+    var samples = audioBuffer
+    audioBuffer.removeAll()
     bufferLock.unlock()
+
+    defer {
+      bufferLock.lock()
+      samples.append(contentsOf: audioBuffer)
+      audioBuffer = samples
+      bufferLock.unlock()
+    }
 
     guard samples.count >= 16000 else { return nil }
     return MLXArray(samples)
