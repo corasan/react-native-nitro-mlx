@@ -89,17 +89,30 @@ function validateToolDefinitions(tools: ToolDefinition[]): ToolDefinition[] {
   })
 }
 
-export function validateLLMLoadOptions(
-  options?: LLMLoadOptions,
-): LLMLoadOptions | undefined {
+function validateLoadOptions<
+  T extends { onProgress?: ((progress: number) => void) | null },
+>(options: T | undefined, name: string): T | undefined {
   if (!options) {
     return undefined
   }
 
   return {
     ...options,
-    onProgress: createSafeCallback('LLM.load onProgress', options.onProgress),
-    tools: options.tools ? validateToolDefinitions(options.tools) : options.tools,
+    onProgress: createSafeCallback(`${name}.load onProgress`, options.onProgress),
+  }
+}
+
+export function validateLLMLoadOptions(
+  options?: LLMLoadOptions,
+): LLMLoadOptions | undefined {
+  const validated = validateLoadOptions(options, 'LLM')
+  if (!validated) {
+    return undefined
+  }
+
+  return {
+    ...validated,
+    tools: validated.tools ? validateToolDefinitions(validated.tools) : validated.tools,
   }
 }
 
@@ -112,40 +125,19 @@ export function validateModelDownloadCallback(
 export function validateSTTLoadOptions(
   options?: STTLoadOptions,
 ): STTLoadOptions | undefined {
-  if (!options) {
-    return undefined
-  }
-
-  return {
-    ...options,
-    onProgress: createSafeCallback('STT.load onProgress', options.onProgress),
-  }
+  return validateLoadOptions(options, 'STT')
 }
 
 export function validateEmbeddingsLoadOptions(
   options?: EmbeddingsLoadOptions,
 ): EmbeddingsLoadOptions | undefined {
-  if (!options) {
-    return undefined
-  }
-
-  return {
-    ...options,
-    onProgress: createSafeCallback('Embeddings.load onProgress', options.onProgress),
-  }
+  return validateLoadOptions(options, 'Embeddings')
 }
 
 export function validateTTSLoadOptions(
   options?: TTSLoadOptions,
 ): TTSLoadOptions | undefined {
-  if (!options) {
-    return undefined
-  }
-
-  return {
-    ...options,
-    onProgress: createSafeCallback('TTS.load onProgress', options.onProgress),
-  }
+  return validateLoadOptions(options, 'TTS')
 }
 
 export function validateTTSGenerateOptions(
