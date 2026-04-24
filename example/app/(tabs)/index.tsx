@@ -353,7 +353,7 @@ export default function ChatScreen() {
     }
 
     loadModel()
-  }, [isDownloaded, isReady])
+  }, [isDownloaded, isReady, refreshManifest])
 
   const sendPrompt = async () => {
     if (!isReady || !prompt.trim() || isGenerating) return
@@ -688,9 +688,7 @@ export default function ChatScreen() {
         >
           <View style={styles.headerTopRow}>
             <TouchableOpacity style={styles.benchmarkLink} onPress={openSettings}>
-              <Text style={[styles.headerButton, { color: '#007AFF' }]}>
-                Benchmark
-              </Text>
+              <Text style={[styles.headerButton, { color: '#007AFF' }]}>Benchmark</Text>
             </TouchableOpacity>
             <Text numberOfLines={1} style={[styles.headerTitle, { color: textColor }]}>
               MLX Chat
