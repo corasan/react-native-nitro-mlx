@@ -705,8 +705,6 @@ private final class HybridLLMCore {
         loadTask?.cancel()
 
         let task = Task { @MainActor in
-            Memory.cacheLimit = 2_000_000
-
             currentTask?.cancel()
             currentTask = nil
             session = nil
