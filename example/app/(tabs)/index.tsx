@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   LayoutAnimation,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -242,6 +243,8 @@ export default function ChatScreen() {
   const [isReady, setIsReady] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isRunningTrimDebug, setIsRunningTrimDebug] = useState(false)
+  const [trimDebugTurn, setTrimDebugTurn] = useState(0)
   const colorScheme = useColorScheme()
   const textColor = colorScheme === 'dark' ? 'white' : 'black'
   const bgColor = colorScheme === 'dark' ? 'black' : 'white'
@@ -350,7 +353,7 @@ export default function ChatScreen() {
     }
 
     loadModel()
-  }, [isDownloaded, isReady])
+  }, [isDownloaded, isReady, refreshManifest])
 
   const sendPrompt = async () => {
     if (!isReady || !prompt.trim() || isGenerating) return
@@ -562,6 +565,66 @@ export default function ChatScreen() {
     }
   }
 
+  const runHistoryTrimDebugTest = async () => {
+    if (!isDownloaded || isGenerating || isRunningTrimDebug) return
+
+    setIsRunningTrimDebug(true)
+    setTrimDebugTurn(0)
+    setIsLoading(true)
+    setLoadProgress(0)
+    setIsReady(false)
+    setMessages([])
+    isLoadingRef.current = true
+
+    try {
+      console.log('[HistoryTrimDebug] Starting managed-history trim test')
+      LLM.unload()
+      LLM.systemPrompt = 'You are a concise assistant.'
+      await LLM.load(MODEL_ID, {
+        onProgress: setLoadProgress,
+        manageHistory: true,
+        tools: [weatherTool],
+        generationConfig: {
+          maxTokens: 8,
+        },
+        contextConfig: {
+          maxContextTokens: 512,
+          keepLastMessages: 4,
+        },
+      })
+
+      setIsReady(true)
+      await refreshManifest()
+
+      for (let index = 0; index < 10; index += 1) {
+        setTrimDebugTurn(index + 1)
+        const promptText = [
+          `History trim debug turn ${index + 1}.`,
+          'Reply with only the turn number.',
+          'Padding:',
+          'alpha beta gamma delta epsilon zeta eta theta iota kappa '.repeat(80),
+        ].join(' ')
+
+        await LLM.generate(promptText)
+        const history = LLM.getHistory()
+        console.log(
+          `[HistoryTrimDebug] turn ${index + 1}: ${history.length} managed message(s)`,
+        )
+      }
+
+      const history = LLM.getHistory()
+      console.log('[HistoryTrimDebug] Final managed history:', history)
+      syncFromHistory()
+    } catch (error) {
+      console.error('[HistoryTrimDebug] Failed:', error)
+    } finally {
+      setIsLoading(false)
+      setIsRunningTrimDebug(false)
+      setTrimDebugTurn(0)
+      isLoadingRef.current = false
+    }
+  }
+
   useEffect(() => {
     if (isReady) {
       syncFromHistory()
@@ -597,7 +660,11 @@ export default function ChatScreen() {
       <SafeAreaView style={[styles.centered, { backgroundColor: bgColor }]}>
         <ActivityIndicator size="large" />
         <Text style={[styles.statusText, { color: textColor }]}>
-          Loading model... {(loadProgress * 100).toFixed(0)}%
+          {isRunningTrimDebug
+            ? trimDebugTurn > 0
+              ? `Running trim test... turn ${trimDebugTurn} of 10`
+              : `Preparing trim test... ${(loadProgress * 100).toFixed(0)}%`
+            : `Loading model... ${(loadProgress * 100).toFixed(0)}%`}
         </Text>
       </SafeAreaView>
     )
@@ -619,13 +686,35 @@ export default function ChatScreen() {
             { borderBottomColor: colorScheme === 'dark' ? '#333' : '#eee' },
           ]}
         >
-          <TouchableOpacity onPress={openSettings}>
-            <Text style={[styles.headerButton, { color: '#007AFF' }]}>Benchmark</Text>
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: textColor }]}>MLX Chat</Text>
-          <View style={styles.headerButtons}>
+          <View style={styles.headerTopRow}>
+            <TouchableOpacity style={styles.benchmarkLink} onPress={openSettings}>
+              <Text style={[styles.headerButton, { color: '#007AFF' }]}>Benchmark</Text>
+            </TouchableOpacity>
+            <Text numberOfLines={1} style={[styles.headerTitle, { color: textColor }]}>
+              MLX Chat
+            </Text>
+            <View style={styles.headerTopSpacer} />
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.headerButtons}
+            style={styles.headerActionsRail}
+          >
             <TouchableOpacity style={styles.historyButton} onPress={logHistory}>
               <Text style={styles.historyButtonText}>Log</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.trimDebugButton,
+                isRunningTrimDebug && styles.headerActionDisabled,
+              ]}
+              onPress={runHistoryTrimDebugTest}
+              disabled={isRunningTrimDebug}
+            >
+              <Text style={styles.trimDebugButtonText}>
+                {isRunningTrimDebug ? '...' : 'Trim'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.manifestButton} onPress={refreshManifest}>
               <Text style={styles.manifestButtonText}>Manifest</Text>
@@ -636,7 +725,7 @@ export default function ChatScreen() {
             <TouchableOpacity style={styles.deleteButton} onPress={deleteModel}>
               <Text style={styles.deleteButtonText}>Delete</Text>
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         </View>
 
         <View
@@ -706,21 +795,37 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   header: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    alignItems: 'center',
+    gap: 10,
+  },
+  headerTopRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 18,
     fontWeight: '600',
+    textAlign: 'center',
   },
   headerButton: {
     fontSize: 14,
     fontWeight: '500',
   },
+  benchmarkLink: {
+    minWidth: 80,
+  },
+  headerTopSpacer: {
+    width: 80,
+  },
+  headerActionsRail: {
+    marginHorizontal: -16,
+  },
   headerButtons: {
+    paddingHorizontal: 16,
     flexDirection: 'row',
     gap: 6,
   },
@@ -745,6 +850,20 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: '600',
+  },
+  trimDebugButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#5856D6',
+  },
+  trimDebugButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  headerActionDisabled: {
+    opacity: 0.5,
   },
   clearButton: {
     paddingHorizontal: 10,

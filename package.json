@@ -6,6 +6,7 @@
     "postinstall": "tsc -p ./package --noEmit || exit 0;",
     "typescript": "bun tsc -p ./package --noEmit",
     "test": "bun --cwd ./package test",
+    "test:ios-history-trim": "cd package && bun run test:ios-history-trim",
     "clean": "rm -rf package/tsconfig.tsbuildinfo node_modules example/node_modules example/ios package/node_modules package/lib example/.expo",
     "specs": "bun --cwd ./package specs",
     "specs:pod": "bun --cwd ./package specs && cd example/ios && pod install && cd ../../",

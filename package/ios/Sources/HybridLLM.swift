@@ -405,41 +405,52 @@ private final class HybridLLMCore {
             minimum: 0
         ) ?? defaultKeepLastMessages
 
+        var tokenizationPasses = 0
+
         func tokenCount(for history: [LLMMessage]) async throws -> Int {
+            tokenizationPasses += 1
             let input = try await container.prepare(
                 input: makeUserInput(history: history, prompt: upcomingPrompt)
             )
             return input.text.tokens.size
         }
 
-        var trimmedHistory = messageHistory
-        let initialTokenCount = try await tokenCount(for: trimmedHistory)
+        let originalHistory = messageHistory
+        let initialTokenCount = try await tokenCount(for: originalHistory)
 
         guard initialTokenCount > maxContextTokens else { return }
 
-        while trimmedHistory.count > keepLastMessages {
-            trimmedHistory.removeFirst()
-
-            if try await tokenCount(for: trimmedHistory) <= maxContextTokens {
-                break
-            }
-        }
-
-        guard trimmedHistory.count != messageHistory.count else {
+        let maxRemovableMessages = max(0, originalHistory.count - keepLastMessages)
+        guard maxRemovableMessages > 0 else {
             log(
                 "Context remains above the configured limit (\(maxContextTokens) tokens); pinned and recent messages were preserved"
             )
             return
         }
 
-        let removedCount = messageHistory.count - trimmedHistory.count
+        guard let trimPlan = try await ManagedHistoryTrimPlanner.plan(
+            initialTokenCount: initialTokenCount,
+            maxContextTokens: maxContextTokens,
+            maxRemovableMessages: maxRemovableMessages,
+            tokenCountAfterRemoving: { removalCount in
+                try await tokenCount(
+                    for: Array(originalHistory.dropFirst(removalCount))
+                )
+            }
+        ) else {
+            return
+        }
+
+        let removedCount = trimPlan.removalCount
+        let trimmedHistory = Array(originalHistory.dropFirst(removedCount))
+
         messageHistory = trimmedHistory
         log(
-            "Trimmed \(removedCount) message(s) from managed history to stay within \(maxContextTokens) prompt tokens"
+            "Trimmed \(removedCount) message(s) from managed history to stay within \(maxContextTokens) prompt tokens after \(tokenizationPasses) tokenization pass(es)"
         )
         rebuildManagedSession()
 
-        if try await tokenCount(for: trimmedHistory) > maxContextTokens {
+        if !trimPlan.fitsBudget {
             log(
                 "Context still exceeds \(maxContextTokens) tokens after trimming because preserved messages alone are larger than the budget"
             )
