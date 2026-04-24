@@ -5,7 +5,154 @@ internal import MLXLLM
 internal import MLXLMCommon
 internal import Tokenizers
 
+private enum MainActorSync {
+    static func read<T>(_ body: @escaping @MainActor () -> T) -> T {
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated(body)
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: T!
+
+        Task { @MainActor in
+            result = body()
+            semaphore.signal()
+        }
+
+        semaphore.wait()
+        return result!
+    }
+
+    static func write(_ body: @escaping @MainActor () -> Void) {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated(body)
+            return
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+
+        Task { @MainActor in
+            body()
+            semaphore.signal()
+        }
+
+        semaphore.wait()
+    }
+
+    static func run(_ body: @escaping @MainActor () throws -> Void) throws {
+        if Thread.isMainThread {
+            try MainActor.assumeIsolated(body)
+            return
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: Result<Void, Error>!
+
+        Task { @MainActor in
+            result = Result {
+                try body()
+            }
+            semaphore.signal()
+        }
+
+        semaphore.wait()
+        try result.get()
+    }
+}
+
 class HybridLLM: HybridLLMSpec {
+    private let core: HybridLLMCore
+
+    override init() {
+        core = MainActorSync.read {
+            HybridLLMCore()
+        }
+    }
+
+    var isLoaded: Bool {
+        MainActorSync.read { self.core.isLoaded }
+    }
+
+    var isGenerating: Bool {
+        MainActorSync.read { self.core.isGenerating }
+    }
+
+    var modelId: String {
+        MainActorSync.read { self.core.modelId }
+    }
+
+    var debug: Bool {
+        get {
+            MainActorSync.read { self.core.debug }
+        }
+        set {
+            MainActorSync.write { self.core.debug = newValue }
+        }
+    }
+
+    var systemPrompt: String {
+        get {
+            MainActorSync.read { self.core.systemPrompt }
+        }
+        set {
+            MainActorSync.write { self.core.systemPrompt = newValue }
+        }
+    }
+
+    func load(modelId: String, options: LLMLoadOptions?) throws -> Promise<Void> {
+        Promise.async { [core] in
+            try await core.load(modelId: modelId, options: options)
+        }
+    }
+
+    func generate(prompt: String) throws -> Promise<String> {
+        Promise.async { [core] in
+            try await core.generate(prompt: prompt)
+        }
+    }
+
+    func stream(
+        prompt: String,
+        onToken: @escaping (String) -> Void,
+        onToolCall: ((String, String) -> Void)?
+    ) throws -> Promise<String> {
+        Promise.async { [core] in
+            try await core.stream(prompt: prompt, onToken: onToken, onToolCall: onToolCall)
+        }
+    }
+
+    func streamWithEvents(
+        prompt: String,
+        onEvent: @escaping (String) -> Void
+    ) throws -> Promise<String> {
+        Promise.async { [core] in
+            try await core.streamWithEvents(prompt: prompt, onEvent: onEvent)
+        }
+    }
+
+    func stop() throws {
+        try MainActorSync.run { self.core.stop() }
+    }
+
+    func unload() throws {
+        try MainActorSync.run { self.core.unload() }
+    }
+
+    func getLastGenerationStats() throws -> GenerationStats {
+        MainActorSync.read { self.core.getLastGenerationStats() }
+    }
+
+    func getHistory() throws -> [LLMMessage] {
+        MainActorSync.read { self.core.getHistory() }
+    }
+
+    func clearHistory() throws {
+        try MainActorSync.run { self.core.clearHistory() }
+    }
+}
+
+@MainActor
+private final class HybridLLMCore {
     private final class TokenBatcher {
         private let batchSize: Int
         private let emit: (String) -> Void
@@ -415,91 +562,88 @@ class HybridLLM: HybridLLMSpec {
         )
     }
 
-    func load(modelId: String, options: LLMLoadOptions?) throws -> Promise<Void> {
+    func load(modelId: String, options: LLMLoadOptions?) async throws {
         loadTask?.cancel()
 
-        return Promise.async { [self] in
-            let task = Task { @MainActor in
-                Memory.cacheLimit = 2_000_000
+        let task = Task { @MainActor in
+            Memory.cacheLimit = 2_000_000
 
-                currentTask?.cancel()
-                currentTask = nil
-                session = nil
-                container = nil
-                tools = []
-                toolSchemas = []
-                seedMessages = []
-                messageHistory = []
-                manageHistory = false
-                generationParameters = GenerateParameters()
-                tokenBatchSize = 4
-                contextConfig = nil
-                self.modelId = ""
-                Memory.clearCache()
+            currentTask?.cancel()
+            currentTask = nil
+            session = nil
+            container = nil
+            tools = []
+            toolSchemas = []
+            seedMessages = []
+            messageHistory = []
+            manageHistory = false
+            generationParameters = GenerateParameters()
+            tokenBatchSize = 4
+            contextConfig = nil
+            self.modelId = ""
+            Memory.clearCache()
 
-                let memoryAfterCleanup = getMemoryUsage()
-                let gpuAfterCleanup = getGPUMemoryUsage()
-                log("After cleanup - Host: \(memoryAfterCleanup), GPU: \(gpuAfterCleanup)")
+            let memoryAfterCleanup = getMemoryUsage()
+            let gpuAfterCleanup = getGPUMemoryUsage()
+            log("After cleanup - Host: \(memoryAfterCleanup), GPU: \(gpuAfterCleanup)")
 
-                if !(await ModelDownloader.shared.isDownloaded(modelId: modelId)) {
-                    log("Model not cached, downloading before load: \(modelId)")
-                    _ = try await ModelDownloader.shared.download(
-                        modelId: modelId,
-                        progressCallback: { fraction in
-                            options?.onProgress?(fraction)
-                        }
-                    )
-                }
-
-                let modelDir = await ModelDownloader.shared.getModelDirectory(modelId: modelId)
-                log("Loading from directory: \(modelDir.path)")
-
-                let loadedContainer = try await modelFactory.loadContainer(
-                    from: modelDir,
-                    using: tokenizerLoader
+            if !(await ModelDownloader.shared.isDownloaded(modelId: modelId)) {
+                log("Model not cached, downloading before load: \(modelId)")
+                _ = try await ModelDownloader.shared.download(
+                    modelId: modelId,
+                    progressCallback: { fraction in
+                        options?.onProgress?(fraction)
+                    }
                 )
-
-                try Task.checkCancellation()
-
-                let memoryAfterContainer = getMemoryUsage()
-                let gpuAfterContainer = getGPUMemoryUsage()
-                log("Model loaded - Host: \(memoryAfterContainer), GPU: \(gpuAfterContainer)")
-
-                if let jsTools = options?.tools {
-                    tools = jsTools
-                    toolSchemas = jsTools.map { buildToolSchema(from: $0) }
-                    log("Loaded \(tools.count) tools: \(tools.map(\.name))")
-                }
-
-                generationParameters = buildGenerateParameters(from: options?.generationConfig)
-                tokenBatchSize = normalizedInt(options?.tokenBatchSize, minimum: 1) ?? 4
-                contextConfig = options?.contextConfig
-
-                self.container = loadedContainer
-                self.modelId = modelId
-                manageHistory = options?.manageHistory ?? false
-                seedMessages = options?.additionalContext ?? []
-                messageHistory = []
-
-                if manageHistory {
-                    log("History management enabled with \(seedMessages.count) seed messages")
-                }
-
-                rebuildManagedSession()
             }
 
-            loadTask = task
-            try await task.value
+            let modelDir = await ModelDownloader.shared.getModelDirectory(modelId: modelId)
+            log("Loading from directory: \(modelDir.path)")
+
+            let loadedContainer = try await modelFactory.loadContainer(
+                from: modelDir,
+                using: tokenizerLoader
+            )
+
+            try Task.checkCancellation()
+
+            let memoryAfterContainer = getMemoryUsage()
+            let gpuAfterContainer = getGPUMemoryUsage()
+            log("Model loaded - Host: \(memoryAfterContainer), GPU: \(gpuAfterContainer)")
+
+            if let jsTools = options?.tools {
+                tools = jsTools
+                toolSchemas = jsTools.map { buildToolSchema(from: $0) }
+                log("Loaded \(tools.count) tools: \(tools.map(\.name))")
+            }
+
+            generationParameters = buildGenerateParameters(from: options?.generationConfig)
+            tokenBatchSize = normalizedInt(options?.tokenBatchSize, minimum: 1) ?? 4
+            contextConfig = options?.contextConfig
+
+            self.container = loadedContainer
+            self.modelId = modelId
+            manageHistory = options?.manageHistory ?? false
+            seedMessages = options?.additionalContext ?? []
+            messageHistory = []
+
+            if manageHistory {
+                log("History management enabled with \(seedMessages.count) seed messages")
+            }
+
+            rebuildManagedSession()
         }
+
+        loadTask = task
+        try await task.value
     }
 
-    func generate(prompt: String) throws -> Promise<String> {
+    func generate(prompt: String) async throws -> String {
         guard let container else {
             throw LLMError.notLoaded
         }
 
-        return Promise.async { [self] in
-            let task = Task<String, Error> {
+        let task = Task<String, Error> { @MainActor in
                 let startTime = Date()
 
                 if canUseManagedSession {
@@ -566,23 +710,21 @@ class HybridLLM: HybridLLMSpec {
                 return result
             }
 
-            currentTask = task
-            defer { currentTask = nil }
-            return try await task.value
-        }
+        currentTask = task
+        defer { currentTask = nil }
+        return try await task.value
     }
 
     func stream(
         prompt: String,
         onToken: @escaping (String) -> Void,
         onToolCall: ((String, String) -> Void)?
-    ) throws -> Promise<String> {
+    ) async throws -> String {
         guard let container else {
             throw LLMError.notLoaded
         }
 
-        return Promise.async { [self] in
-            let task = Task<String, Error> {
+        let task = Task<String, Error> { @MainActor in
                 let startTime = Date()
                 let batcher = TokenBatcher(batchSize: tokenBatchSize, emit: onToken)
 
@@ -658,22 +800,20 @@ class HybridLLM: HybridLLMSpec {
                 return result
             }
 
-            currentTask = task
-            defer { currentTask = nil }
-            return try await task.value
-        }
+        currentTask = task
+        defer { currentTask = nil }
+        return try await task.value
     }
 
     func streamWithEvents(
         prompt: String,
         onEvent: @escaping (String) -> Void
-    ) throws -> Promise<String> {
+    ) async throws -> String {
         guard let container else {
             throw LLMError.notLoaded
         }
 
-        return Promise.async { [self] in
-            let task = Task<String, Error> {
+        let task = Task<String, Error> { @MainActor in
                 let startTime = Date()
                 let emitter = StreamEventEmitter(callback: onEvent)
                 emitter.emitGenerationStart()
@@ -758,10 +898,9 @@ class HybridLLM: HybridLLMSpec {
                 return result
             }
 
-            currentTask = task
-            defer { currentTask = nil }
-            return try await task.value
-        }
+        currentTask = task
+        defer { currentTask = nil }
+        return try await task.value
     }
 
     private func performGenerationWithEvents(
@@ -793,11 +932,12 @@ class HybridLLM: HybridLLMSpec {
         )
         let userInput = UserInput(chat: chat, tools: configuredToolSchemas())
         let lmInput = try await container.prepare(input: userInput)
+        let parameters = generationParameters
 
         let stream = try await container.perform { context in
             try MLXLMCommon.generate(
                 input: lmInput,
-                parameters: generationParameters,
+                parameters: parameters,
                 context: context
             )
         }
@@ -897,11 +1037,11 @@ class HybridLLM: HybridLLMSpec {
                                 tool: call.tool,
                                 argsDict: call.args
                             )
-                            log("Tool result for \(call.tool.name): \(resultJson.prefix(100))...")
+                            await log("Tool result for \(call.tool.name): \(resultJson.prefix(100))...")
                             emitter.emitToolCallCompleted(id: call.id, result: resultJson)
                             return (index, resultJson)
                         } catch {
-                            log("Tool execution error for \(call.tool.name): \(error)")
+                            await log("Tool execution error for \(call.tool.name): \(error)")
                             emitter.emitToolCallFailed(id: call.id, error: error.localizedDescription)
                             return (index, "{\"error\": \"Tool execution failed\"}")
                         }
@@ -983,11 +1123,12 @@ class HybridLLM: HybridLLMSpec {
         )
         let userInput = UserInput(chat: chat, tools: configuredToolSchemas())
         let lmInput = try await container.prepare(input: userInput)
+        let parameters = generationParameters
 
         let stream = try await container.perform { context in
             try MLXLMCommon.generate(
                 input: lmInput,
-                parameters: generationParameters,
+                parameters: parameters,
                 context: context
             )
         }
@@ -1039,10 +1180,10 @@ class HybridLLM: HybridLLMSpec {
                                 tool: call.tool,
                                 argsDict: call.args
                             )
-                            log("Tool result for \(call.tool.name): \(resultJson.prefix(100))...")
+                            await log("Tool result for \(call.tool.name): \(resultJson.prefix(100))...")
                             return (index, resultJson)
                         } catch {
-                            log("Tool execution error for \(call.tool.name): \(error)")
+                            await log("Tool execution error for \(call.tool.name): \(error)")
                             return (index, "{\"error\": \"Tool execution failed\"}")
                         }
                     }
@@ -1139,12 +1280,12 @@ class HybridLLM: HybridLLMSpec {
         return dict
     }
 
-    func stop() throws {
+    func stop() {
         currentTask?.cancel()
         currentTask = nil
     }
 
-    func unload() throws {
+    func unload() {
         loadTask?.cancel()
         loadTask = nil
 
@@ -1173,15 +1314,15 @@ class HybridLLM: HybridLLMSpec {
         log("After unload - Host: \(memoryAfter), GPU: \(gpuAfter)")
     }
 
-    func getLastGenerationStats() throws -> GenerationStats {
+    func getLastGenerationStats() -> GenerationStats {
         lastStats
     }
 
-    func getHistory() throws -> [LLMMessage] {
+    func getHistory() -> [LLMMessage] {
         combinedHistory(with: messageHistory)
     }
 
-    func clearHistory() throws {
+    func clearHistory() {
         messageHistory = []
         rebuildManagedSession()
         log("Message history cleared")
