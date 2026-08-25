@@ -52,6 +52,10 @@ class HybridTTS: HybridTTSSpec {
         self.activeTask = nil
         self.model = nil
         MLX.Memory.clearCache()
+        // Same rationale as HybridLLM.load: unbounded, MLX's buffer cache
+        // grows toward Metal's working-set size across repeated inference and
+        // trips iOS's Jetsam limit. Cap it for TTS-only apps too.
+        MLX.Memory.cacheLimit = 20 * 1024 * 1024
 
         let loadedModel = try await TTS.loadModel(modelRepo: modelId)
 

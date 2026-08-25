@@ -1,5 +1,11 @@
 import Foundation
 import NitroModules
+import os
+
+#if canImport(UIKit)
+    import UIKit
+#endif
+
 internal import MLX
 internal import MLXLLM
 internal import MLXLMCommon
@@ -442,6 +448,42 @@ private final class HybridLLMCore {
     var debug: Bool = false
     var systemPrompt: String = "You are a helpful assistant."
 
+    private var lifecycleObservers: [NSObjectProtocol] = []
+
+    init() {
+        #if canImport(UIKit)
+            lifecycleObservers.append(
+                NotificationCenter.default.addObserver(
+                    forName: UIApplication.didEnterBackgroundNotification,
+                    object: nil, queue: nil
+                ) { [weak self] _ in
+                    // iOS refuses GPU work from backgrounded apps, so a turn
+                    // still decoding when the app leaves the foreground dies
+                    // mid-pass with a Metal permission error. Stop it instead:
+                    // the `.stopped` path resolves the turn normally and
+                    // commits the partial content.
+                    Task { @MainActor in
+                        self?.generationTasks.cancel(reason: .stopped)
+                    }
+                }
+            )
+            lifecycleObservers.append(
+                NotificationCenter.default.addObserver(
+                    forName: UIApplication.didReceiveMemoryWarningNotification,
+                    object: nil, queue: nil
+                ) { _ in
+                    Memory.clearCache()
+                }
+            )
+        #endif
+    }
+
+    deinit {
+        for observer in lifecycleObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
     private let maxToolCallDepth = 10
     private let defaultKeepLastMessages = 4
 
@@ -496,7 +538,14 @@ private final class HybridLLMCore {
 
         if result == KERN_SUCCESS {
             let usedMB = Float(taskInfo.resident_size) / 1024.0 / 1024.0
-            return String(format: "%.1f MB", usedMB)
+            #if os(iOS) || os(tvOS) || os(visionOS)
+                // The number that actually predicts an OOM kill on iOS is the
+                // remaining Jetsam budget, not the resident size.
+                let availableMB = Float(os_proc_available_memory()) / 1024.0 / 1024.0
+                return String(format: "%.1f MB used, %.1f MB before Jetsam", usedMB, availableMB)
+            #else
+                return String(format: "%.1f MB", usedMB)
+            #endif
         } else {
             return "unknown"
         }
@@ -570,15 +619,21 @@ private final class HybridLLMCore {
 
     /// Sustained decode saturates the GPU and walks the device into thermal
     /// throttling, where clocks — and with them tokens/s — drop far below what
-    /// a brief idle costs. Once iOS reports pressure, suspend the pipeline
-    /// between tokens so the GPU idles and the device sheds heat; a no-op
-    /// below `.serious`.
+    /// a brief idle costs.
+    ///
+    /// Pacing has to happen *between passes*, not between received elements:
+    /// `streamDetails` decodes through unbounded `AsyncStream`s (upstream
+    /// `Evaluate.swift` `generateLoopTask` -> `makeStream()`), so the decode
+    /// loop never waits on this consumer — sleeping per element cannot idle
+    /// the GPU, it only delays delivery of tokens that already exist. A pause
+    /// before a pass starts (including tool-continuation passes) genuinely
+    /// sheds heat. A no-op below `.serious`.
     private func paceForThermals() async throws {
         switch ProcessInfo.processInfo.thermalState {
         case .serious:
-            try await Task.sleep(nanoseconds: 8_000_000)
+            try await Task.sleep(nanoseconds: 500_000_000)
         case .critical:
-            try await Task.sleep(nanoseconds: 24_000_000)
+            try await Task.sleep(nanoseconds: 2_000_000_000)
         default:
             break
         }
@@ -592,12 +647,24 @@ private final class HybridLLMCore {
     private static let defaultKVBits = 8
     private static let defaultQuantizedKVStart = 2048
 
+    /// Widths upstream's affine KV quantization actually supports
+    /// (`KVCache.toQuantized` -> MLX `quantized(bits:)`); anything else faults
+    /// in the Metal kernels. 0 — or any unsupported width — disables
+    /// quantization (full-precision cache) instead of clamping into a 1-bit
+    /// cache the way `normalizedInt(minimum: 1)` used to.
+    private static let supportedKVBits: Set<Int> = [2, 4, 8]
+
+    private func normalizedKVBits(_ value: Double?) -> Int? {
+        guard let value else { return Self.defaultKVBits }
+        let bits = Int(value)
+        return Self.supportedKVBits.contains(bits) ? bits : nil
+    }
+
     private func buildGenerateParameters(from config: LLMGenerationConfig?) -> GenerateParameters {
         GenerateParameters(
             maxTokens: normalizedInt(config?.maxTokens, minimum: 1),
             maxKVSize: normalizedInt(config?.maxKVSize, minimum: 1),
-            kvBits: normalizedInt(config?.kvBits, minimum: 1)
-                ?? Self.defaultKVBits,
+            kvBits: normalizedKVBits(config?.kvBits),
             kvGroupSize: normalizedInt(config?.kvGroupSize, minimum: 1) ?? 64,
             quantizedKVStart: normalizedInt(config?.quantizedKVStart, minimum: 0)
                 ?? (config?.kvBits == nil ? Self.defaultQuantizedKVStart : 0),
@@ -1230,8 +1297,8 @@ private final class HybridLLMCore {
             }
         }
 
+        try await paceForThermals()
         for try await generation in session.streamDetails(to: inputMessages) {
-            try await paceForThermals()
             try Task.checkCancellation()
             switch generation {
             case .chunk(let text):
@@ -1995,8 +2062,8 @@ private final class HybridLLMCore {
             }
         }
 
+        try await paceForThermals()
         for try await generation in session.streamDetails(to: inputMessages) {
-            try await paceForThermals()
             switch generation {
             case .chunk(let text):
                 progress.recordContent(
