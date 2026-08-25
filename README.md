@@ -183,9 +183,12 @@ cases.
 
 `LLM.runTurn` runs one LLM Generation Turn and returns any Tool Call Requests to
 you. The package does not execute tools and does not loop for you — your code
-owns both.
+owns both. That is deliberate: the package ships the primitives an agent needs
+(turns, Turn Contexts, transcript helpers, token counting, `AbortSignal`
+cancellation), never the agent itself, so your harness — approval gates,
+step limits, parallel tools, whatever policy fits your app — stays yours.
 
-Two rules keep a loop correct:
+Three rules keep a loop correct:
 
 - Branch on `turn.toolCalls.length`, not on `finishReason === 'tool_calls'`.
   The tool-call array tells you whether the model wants to act. Read
@@ -196,13 +199,23 @@ Two rules keep a loop correct:
   failed one. Set `isError: true` on failure: the library prefixes the
   rendered content with `"Error: "` so the model sees the failure on every
   path. Put the failure reason in `content` yourself — the prefix marks the
-  failure, `content` explains it.
+  failure, `content` explains it. `toolResultMessage(call, result)` builds
+  this message for you.
+- Compose the next turn's messages with `nextTurnMessages(...)`. Warm turns
+  (with a `contextId`) carry only the new tool results — the Turn Context
+  retains the transcript natively. Cold turns are stateless on the native
+  side, so each request must carry the whole exchange: the prior messages,
+  the assistant tool-call turn, and the results. Sending only the results on
+  a cold turn hands the model orphaned tool outputs with no question
+  attached.
 
 ```typescript
 import {
   LLM,
   type LLMMessage,
   type LLMTurnOutcome,
+  nextTurnMessages,
+  toolResultMessage,
   type ToolSchema,
 } from 'react-native-nitro-mlx'
 
@@ -245,16 +258,13 @@ async function runAgent(goal: string, maxSteps = 6): Promise<LLMTurnOutcome> {
         return turn
       }
 
-      messages = turn.toolCalls.map((call): LLMMessage => {
+      const results = turn.toolCalls.map((call): LLMMessage => {
         const { content, isError } = executeTool(call.name, call.arguments)
-        return {
-          role: 'tool',
-          toolCallId: call.id,
-          name: call.name,
-          content,
-          isError: isError || undefined,
-        }
+        return toolResultMessage(call, { content, isError })
       })
+      // Warm turn: only the results. Drop contextId and this same line
+      // carries the full transcript a cold turn needs.
+      messages = nextTurnMessages({ contextId: ctx.id, messages, outcome: turn, results })
     }
 
     throw new Error('Agent stopped: too many steps')

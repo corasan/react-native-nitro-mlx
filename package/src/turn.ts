@@ -92,6 +92,58 @@ export interface LLMTokenCountRequest {
   messages?: LLMMessage[]
 }
 
+/**
+ * Build the `tool`-role message that answers one Tool Call Request. Every
+ * call needs a result message — even a failed one — keyed by `toolCallId`;
+ * set `isError` so the model sees the failure and can recover.
+ */
+export function toolResultMessage(
+  call: LLMToolCall,
+  result: { content: string; isError?: boolean },
+): LLMMessage {
+  return {
+    role: 'tool',
+    toolCallId: call.id,
+    name: call.name,
+    content: result.content,
+    isError: result.isError || undefined,
+  }
+}
+
+/**
+ * Build the assistant message that records a turn which requested tool calls,
+ * for transcripts your code assembles itself.
+ */
+export function assistantToolCallMessage(outcome: LLMTurnOutcome): LLMMessage {
+  return {
+    role: 'assistant',
+    content: outcome.content,
+    toolCalls: outcome.toolCalls,
+  }
+}
+
+/**
+ * Compose the `messages` for the next turn of a tool loop.
+ *
+ * Warm turns (a `contextId` is present) carry only the new tool results — the
+ * Turn Context retains the transcript natively. Cold turns are stateless on
+ * the native side: each request must carry the whole exchange, so the prior
+ * messages and the assistant tool-call turn are prepended. Sending only the
+ * results on a cold turn hands the model orphaned tool outputs with no
+ * question attached — it will answer nonsense or keep calling tools.
+ */
+export function nextTurnMessages(step: {
+  contextId?: string
+  messages: LLMMessage[]
+  outcome: LLMTurnOutcome
+  results: LLMMessage[]
+}): LLMMessage[] {
+  if (step.contextId !== undefined) {
+    return step.results
+  }
+  return [...step.messages, assistantToolCallMessage(step.outcome), ...step.results]
+}
+
 /** @internal exported for tests */
 export function toWireMessage(message: LLMMessage): LLMTurnMessage {
   switch (message.role) {

@@ -17,13 +17,6 @@ export {
   type ToolChatMessage,
   type UserChatMessage,
 } from './chat'
-export {
-  runToolLoop,
-  type RunToolLoopOptions,
-  type ToolExecutor,
-  type ToolExecutorResult,
-  type ToolLoopResult,
-} from './agent'
 export { cosineSimilarity, Embeddings } from './embeddings'
 export {
   type EventCallback,
@@ -100,13 +93,16 @@ export type { JsonObject, JsonValue } from './json'
 export { STT } from './stt'
 export { createTool, type TypeSafeToolDefinition } from './tool-utils'
 export { TTS } from './tts'
-export type {
-  LLMContext,
-  LLMContextOptions,
-  LLMMessage,
-  LLMTokenCountRequest,
-  LLMToolCall,
-  LLMTurnOutcome,
-  LLMTurnRequest,
-  ToolSchema,
+export {
+  assistantToolCallMessage,
+  type LLMContext,
+  type LLMContextOptions,
+  type LLMMessage,
+  type LLMTokenCountRequest,
+  type LLMToolCall,
+  type LLMTurnOutcome,
+  type LLMTurnRequest,
+  nextTurnMessages,
+  toolResultMessage,
+  type ToolSchema,
 } from './turn'

@@ -464,3 +464,62 @@ describe('LLM.runTurn guards', () => {
     ).rejects.toMatchObject({ name: 'AbortError' })
   })
 })
+
+const { toolResultMessage, assistantToolCallMessage, nextTurnMessages } =
+  await import('./turn')
+
+describe('transcript primitives', () => {
+  const stats = {
+    tokenCount: 1,
+    tokensPerSecond: 1,
+    timeToFirstToken: 1,
+    totalTime: 1,
+    toolExecutionTime: 0,
+  }
+  const outcome = {
+    finishReason: 'tool_calls' as const,
+    content: 'Let me check.',
+    toolCalls: [{ id: 'a', name: 'get_time', arguments: {} }],
+    usage: { promptTokens: 1, completionTokens: 1 },
+    stats,
+  }
+  const results = [toolResultMessage(outcome.toolCalls[0]!, { content: '12:00' })]
+
+  it('builds a tool result message keyed by the call id', () => {
+    expect(results[0]).toEqual({
+      role: 'tool',
+      toolCallId: 'a',
+      name: 'get_time',
+      content: '12:00',
+      isError: undefined,
+    })
+    expect(
+      toolResultMessage(outcome.toolCalls[0]!, { content: 'boom', isError: true }),
+    ).toMatchObject({ isError: true })
+  })
+
+  it('warm turns carry only the new results', () => {
+    expect(
+      nextTurnMessages({
+        contextId: 'ctx-1',
+        messages: [{ role: 'user', content: 'time?' }],
+        outcome,
+        results,
+      }),
+    ).toEqual(results)
+  })
+
+  it('cold turns carry the whole exchange', () => {
+    expect(
+      nextTurnMessages({
+        messages: [{ role: 'user', content: 'time?' }],
+        outcome,
+        results,
+      }),
+    ).toEqual([
+      { role: 'user', content: 'time?' },
+      assistantToolCallMessage(outcome),
+      ...results,
+    ])
+  })
+})
