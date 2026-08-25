@@ -53,8 +53,7 @@ export function createTool<T extends ZodObjectSchema>(
     handler: async (args: AnyMap) => {
       const parsed = definition.arguments.safeParse(args)
       if (!parsed.success) {
-        // This message is fed back to the model as the tool failure; a compact
-        // directive beats a raw ZodError's multi-line JSON issue dump.
+        // This message is fed back to the model as the tool failure.
         throw new Error(
           `Invalid arguments for tool "${definition.name}": ${z.prettifyError(parsed.error)}. Fix the arguments and call the tool again.`,
         )

@@ -236,8 +236,8 @@ export class ChatSession {
     this._setState({ status: 'loading', lastError: null })
 
     try {
-      // Inside the try so a setter failure (validation, native init) reaches
-      // _handleError instead of wedging the session in 'loading'.
+      // A setter failure (validation, native init) must reach _handleError
+      // rather than wedge the session in 'loading'.
       if (this._systemPrompt !== undefined) {
         LLM.systemPrompt = this._systemPrompt
       }

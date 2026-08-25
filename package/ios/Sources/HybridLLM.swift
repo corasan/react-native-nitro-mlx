@@ -457,11 +457,9 @@ private final class HybridLLMCore {
                     forName: UIApplication.didEnterBackgroundNotification,
                     object: nil, queue: nil
                 ) { [weak self] _ in
-                    // iOS refuses GPU work from backgrounded apps, so a turn
-                    // still decoding when the app leaves the foreground dies
-                    // mid-pass with a Metal permission error. Stop it instead:
-                    // the `.stopped` path resolves the turn normally and
-                    // commits the partial content.
+                    // iOS refuses GPU work from backgrounded apps; stopping
+                    // the turn resolves it with `.stopped` and commits the
+                    // partial content instead of dying mid-decode.
                     Task { @MainActor in
                         self?.generationTasks.cancel(reason: .stopped)
                     }
@@ -617,17 +615,11 @@ private final class HybridLLMCore {
         enableThinking.map { ["enable_thinking": $0] }
     }
 
-    /// Sustained decode saturates the GPU and walks the device into thermal
-    /// throttling, where clocks — and with them tokens/s — drop far below what
-    /// a brief idle costs.
-    ///
-    /// Pacing has to happen *between passes*, not between received elements:
-    /// `streamDetails` decodes through unbounded `AsyncStream`s (upstream
-    /// `Evaluate.swift` `generateLoopTask` -> `makeStream()`), so the decode
-    /// loop never waits on this consumer — sleeping per element cannot idle
-    /// the GPU, it only delays delivery of tokens that already exist. A pause
-    /// before a pass starts (including tool-continuation passes) genuinely
-    /// sheds heat. A no-op below `.serious`.
+    /// Sustained decode heats the chip until iOS throttles, so pace under
+    /// pressure — but between passes, not between received elements:
+    /// `streamDetails` buffers through unbounded `AsyncStream`s upstream, so
+    /// the decode loop never waits on this consumer and per-element sleeps
+    /// only delay tokens that already exist. A no-op below `.serious`.
     private func paceForThermals() async throws {
         switch ProcessInfo.processInfo.thermalState {
         case .serious:
@@ -650,8 +642,7 @@ private final class HybridLLMCore {
     /// Widths upstream's affine KV quantization actually supports
     /// (`KVCache.toQuantized` -> MLX `quantized(bits:)`); anything else faults
     /// in the Metal kernels. 0 — or any unsupported width — disables
-    /// quantization (full-precision cache) instead of clamping into a 1-bit
-    /// cache the way `normalizedInt(minimum: 1)` used to.
+    /// quantization and keeps a full-precision cache.
     private static let supportedKVBits: Set<Int> = [2, 4, 8]
 
     private func normalizedKVBits(_ value: Double?) -> Int? {

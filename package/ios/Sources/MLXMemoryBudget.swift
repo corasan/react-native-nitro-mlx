@@ -5,9 +5,8 @@ internal import MLX
 /// process into iOS's Jetsam limit (observed: 2.4 GB footprint, OOM kill,
 /// no crash log). 20 MB is the mlx-swift running-on-ios recommendation.
 ///
-/// One shared knob so every modality (LLM, embeddings, STT, TTS) applies the
-/// same budget. The limit itself is process-global — whichever module loads
-/// last wins — which is exactly why it must not be tuned per call site.
+/// One shared knob for every modality (LLM, embeddings, STT, TTS): the limit
+/// is process-global, so whichever module loads last wins.
 enum MLXMemoryBudget {
     static let recommendedCacheLimit = 20 * 1024 * 1024
 

@@ -397,11 +397,9 @@ actor ModelDownloader: NSObject {
         return docsDir.appendingPathComponent("huggingface/models")
     }
 
-    /// Model weights are re-downloadable, and Apple's data-storage guidelines
-    /// require excluding such data from iCloud/iTunes backup — multi-GB
-    /// weights in backup are an App Review rejection risk and bloat users'
-    /// iCloud quota. Applied to the models root so existing downloads are
-    /// covered too. Best-effort: the flag is an optimization, not a contract.
+    /// Apple's data-storage guidelines require excluding re-downloadable data
+    /// from iCloud/iTunes backup. Applied to the models root so existing
+    /// downloads are covered too; best-effort, as the flag is advisory.
     private func excludeFromBackup(_ url: URL) {
         var url = url
         var values = URLResourceValues()

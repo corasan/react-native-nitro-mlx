@@ -670,8 +670,6 @@ export function validateTurnRequest(request: LLMTurnRequest): void {
     }
   }
   if (request.tools !== undefined) {
-    // Not gated on hasTools: a non-array `tools` must fail loudly here
-    // (validateToolSchemas' first check) instead of shipping to native.
     validateToolSchemas(request.tools, 'runTurn tools')
   }
   if (request.history !== undefined) {
