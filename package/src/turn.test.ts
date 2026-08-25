@@ -369,3 +369,98 @@ describe('LLM.runTurn', () => {
     )
   })
 })
+
+describe('extended generation config validation', () => {
+  const user = [{ role: 'user', content: 'hi' }]
+
+  it('accepts sane tuning values', () => {
+    expect(() =>
+      validateTurnRequest({
+        messages: user,
+        generationConfig: {
+          temperature: 0,
+          topP: 1,
+          kvBits: 4,
+          kvGroupSize: 64,
+          maxTokens: 512,
+          maxKVSize: 4096,
+          prefillStepSize: 512,
+        },
+      }),
+    ).not.toThrow()
+  })
+
+  it('accepts kvBits 0 as the quantization off-switch', () => {
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { kvBits: 0 } }),
+    ).not.toThrow()
+  })
+
+  it('rejects values that would brick a generation natively', () => {
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { temperature: -1 } }),
+    ).toThrow(/temperature/)
+    expect(() =>
+      validateTurnRequest({
+        messages: user,
+        generationConfig: { temperature: Number.NaN },
+      }),
+    ).toThrow(/temperature/)
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { topP: 0 } }),
+    ).toThrow(/topP/)
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { kvBits: 3 } }),
+    ).toThrow(/kvBits/)
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { maxTokens: 0 } }),
+    ).toThrow(/maxTokens/)
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { kvGroupSize: -8 } }),
+    ).toThrow(/kvGroupSize/)
+    expect(() =>
+      validateTurnRequest({
+        messages: user,
+        generationConfig: { prefillStepSize: 1.5 },
+      }),
+    ).toThrow(/prefillStepSize/)
+  })
+
+  it('rejects a non-positive tokenBatchSize', () => {
+    expect(() => validateTurnRequest({ messages: user, tokenBatchSize: 0 })).toThrow(
+      /tokenBatchSize/,
+    )
+    expect(() => validateTurnRequest({ messages: user, tokenBatchSize: 2.5 })).toThrow(
+      /tokenBatchSize/,
+    )
+    expect(() => validateTurnRequest({ messages: user, tokenBatchSize: 4 })).not.toThrow()
+  })
+
+  it('rejects a non-array tools value instead of skipping validation', () => {
+    expect(() =>
+      // SAFETY: deliberately mistyped input to exercise the runtime guard.
+      validateTurnRequest({ messages: user, tools: 'not-an-array' } as never),
+    ).toThrow(/tools must be an array/)
+  })
+})
+
+describe('LLM.runTurn guards', () => {
+  it('rejects a request without a messages array using a branded error', async () => {
+    const { LLM: llm } = await import('./llm')
+    // SAFETY: deliberately mistyped input to exercise the runtime guard.
+    await expect(llm.runTurn({} as never)).rejects.toThrow(
+      /\[react-native-nitro-mlx\] runTurn messages must be an array/,
+    )
+  })
+
+  it('throws an AbortError when the signal is already aborted', async () => {
+    const { LLM: llm } = await import('./llm')
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      llm.runTurn({ messages: [{ role: 'user', content: 'hi' }] }, undefined, {
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+  })
+})

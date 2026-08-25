@@ -111,3 +111,69 @@ describe('ChatSession terminal outcomes', () => {
     }
   })
 })
+
+describe('ChatSession construction and load guards', () => {
+  it('rejects a blank systemPrompt in the constructor instead of wedging load()', () => {
+    expect(() => new ChatSession({ modelId: 'test/model', systemPrompt: '   ' })).toThrow(
+      /systemPrompt/,
+    )
+  })
+
+  it('routes a load failure through onError and leaves status error', async () => {
+    const loadSpy = spyOn(LLM, 'load').mockRejectedValue(new Error('no disk'))
+    try {
+      let seenError: Error | null = null
+      const chat = new ChatSession({
+        modelId: 'test/model',
+        onError: err => {
+          seenError = err
+        },
+      })
+      await expect(chat.load()).rejects.toThrow('no disk')
+      expect(chat.state.status).toBe('error')
+      expect(String(seenError)).toContain('no disk')
+    } finally {
+      loadSpy.mockRestore()
+    }
+  })
+})
+
+describe('ChatSession thinking preservation', () => {
+  it('keeps accumulated thinking when the outcome omits it', async () => {
+    const stats: GenerationStats = {
+      tokenCount: 2,
+      tokensPerSecond: 4,
+      timeToFirstToken: 50,
+      totalTime: 250,
+      toolExecutionTime: 0,
+    }
+    const loadSpy = spyOn(LLM, 'load').mockResolvedValue(undefined)
+    const streamSpy = spyOn(LLM, 'streamWithEvents').mockImplementation(
+      async (_prompt, onEvent) => {
+        // A stop racing the thinking accumulator: thinking streamed, but the
+        // terminal outcome carries no `thinking` field.
+        const outcome = {
+          content: 'partial',
+          stats,
+          finishReason: 'stopped' as const,
+        }
+        onEvent({ type: 'thinking_start', timestamp: 1 })
+        onEvent({ type: 'thinking_chunk', chunk: 'because' })
+        onEvent({ type: 'thinking_end', content: 'because', timestamp: 2 })
+        onEvent({ type: 'token', token: 'partial' })
+        onEvent({ type: 'generation_outcome', outcome })
+        return outcome
+      },
+    )
+
+    try {
+      const chat = new ChatSession({ modelId: 'test/model' })
+      await chat.load()
+      const message = await chat.sendMessage('hello')
+      expect(message.thinking).toBe('because')
+    } finally {
+      loadSpy.mockRestore()
+      streamSpy.mockRestore()
+    }
+  })
+})

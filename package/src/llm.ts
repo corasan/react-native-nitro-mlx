@@ -1,11 +1,13 @@
 import { NitroModules } from 'react-native-nitro-modules'
 import type { JsonObject } from './json'
+import type { AbortSignalLike } from './runtime'
 import {
   assertBoolean,
   assertNonEmptyString,
   createSafeCallback,
   mapStreamEventEnvelope,
-  safeJsonParse,
+  safeJsonParseObject,
+  throwIfAborted,
   validateLLMLoadOptions,
   validateTokenCountRequest,
   validateTurnContextOptions,
@@ -130,7 +132,7 @@ export const LLM = {
         ? (name: string, argsJson: string) => {
             const toolCall = {
               name,
-              arguments: safeJsonParse<JsonObject>(argsJson, {}),
+              arguments: safeJsonParseObject(argsJson, {}),
             }
             accumulatedToolCalls.push(toolCall)
             safeOnToolCall({
@@ -228,20 +230,39 @@ export const LLM = {
    * Run one LLM Generation Turn. Tool Call Requests come back to the caller;
    * this package executes nothing. Branch your loop on toolCalls.length, not
    * on finishReason.
+   *
+   * Pass `options.signal` to cancel from an `AbortController`. An abort
+   * before the turn starts throws an `AbortError`; an abort mid-turn stops
+   * generation and the turn resolves normally with `finishReason: 'stopped'`
+   * and partial content preserved. The underlying `stop()` is global to the
+   * Resident Model, so an abort that fires between turns stops whichever
+   * turn is active at that moment.
    */
   async runTurn(
     request: LLMTurnRequest,
     onEvent?: (event: StreamEvent) => void,
+    options?: { signal?: AbortSignalLike },
   ): Promise<LLMTurnOutcome> {
+    if (!Array.isArray(request?.messages)) {
+      throw new TypeError('[react-native-nitro-mlx] runTurn messages must be an array')
+    }
+    throwIfAborted(options?.signal, 'LLM.runTurn')
     const wireRequest = toWireRequest(request)
     validateTurnRequest(wireRequest)
     const safeOnEvent = createSafeCallback('LLM.runTurn onEvent', onEvent)
-    const wireOutcome = await getInstance().runTurn(wireRequest, envelope => {
-      if (!safeOnEvent) return
-      const event = mapStreamEventEnvelope(envelope)
-      if (event) safeOnEvent(event)
-    })
-    return fromWireOutcome(wireOutcome)
+    const signal = options?.signal
+    const onAbort = () => getInstance().stop()
+    signal?.addEventListener('abort', onAbort, { once: true })
+    try {
+      const wireOutcome = await getInstance().runTurn(wireRequest, envelope => {
+        if (!safeOnEvent) return
+        const event = mapStreamEventEnvelope(envelope)
+        if (event) safeOnEvent(event)
+      })
+      return fromWireOutcome(wireOutcome)
+    } finally {
+      signal?.removeEventListener('abort', onAbort)
+    }
   },
 
   /** Create a Turn Context: retained instructions, transcript, and warm KV cache over the Resident Model. Release it when done. */

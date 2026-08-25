@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { JsonValue } from './json'
+import type { JsonObject, JsonValue } from './json'
 import type {
   EmbeddingsEmbedOptions,
   EmbeddingsLoadOptions,
@@ -82,6 +82,30 @@ export function assertBoolean(value: boolean, name: string): boolean {
   return value
 }
 
+/**
+ * Structural subset of the standard `AbortSignal`. React Native provides the
+ * real implementation at runtime; typing it structurally keeps the package
+ * independent of the DOM type library, and any real `AbortSignal` satisfies it.
+ */
+export interface AbortSignalLike {
+  readonly aborted: boolean
+  addEventListener(
+    type: 'abort',
+    listener: () => void,
+    options?: { once?: boolean },
+  ): void
+  removeEventListener(type: 'abort', listener: () => void): void
+}
+
+/** Throws an `AbortError` when `signal` is already aborted. */
+export function throwIfAborted(signal: AbortSignalLike | undefined, name: string): void {
+  if (signal?.aborted) {
+    const error = new Error(`${ERROR_PREFIX} ${name} was aborted before it started.`)
+    error.name = 'AbortError'
+    throw error
+  }
+}
+
 export function createSafeCallback<TArgs extends unknown[]>(
   name: string,
   callback?: ((...args: TArgs) => void) | null,
@@ -156,6 +180,7 @@ export function validateLLMLoadOptions(
   }
 
   validateGenerationConfig(validated.generationConfig, 'LLM load generationConfig')
+  validateTokenBatchSize(validated.tokenBatchSize, 'LLM load tokenBatchSize')
 
   return {
     ...validated,
@@ -409,6 +434,24 @@ export function safeJsonParse<T>(value: string, fallback: T): T {
   }
 }
 
+/**
+ * Parse model-produced JSON that is contractually an object. `JSON.parse`
+ * happily returns `null`, `5`, or `[1]` for valid JSON, and small on-device
+ * models emit exactly those for tool arguments; anything that is not a plain
+ * object degrades to `fallback`, the same way malformed JSON already does.
+ */
+const jsonObjectProbeSchema = z.looseObject({})
+
+export function safeJsonParseObject(value: string, fallback: JsonObject): JsonObject {
+  const parsed = safeJsonParse<JsonValue>(value, fallback)
+  if (!jsonObjectProbeSchema.safeParse(parsed).success) {
+    return fallback
+  }
+  // SAFETY: the probe accepts exactly plain objects (not null, not arrays),
+  // which is the JsonObject arm of JsonValue.
+  return parsed as JsonObject
+}
+
 const turnMessageSchema = z.looseObject({
   role: z.enum(['system', 'user', 'assistant', 'tool']),
   content: z.string(),
@@ -505,6 +548,11 @@ export function validateToolSchemas(
   })
 }
 
+const positiveInteger = (value: number) => Number.isInteger(value) && value > 0
+
+/** KV cache quantization widths the Metal kernels support; 0 disables quantization. */
+const SUPPORTED_KV_BITS = new Set([0, 2, 4, 8])
+
 const generationTuningSchema = z.looseObject({
   seed: z
     .number()
@@ -518,7 +566,36 @@ const generationTuningSchema = z.looseObject({
     .number()
     .refine(minP => Number.isFinite(minP) && minP >= 0 && minP <= 1)
     .optional(),
+  temperature: z
+    .number()
+    .refine(t => Number.isFinite(t) && t >= 0)
+    .optional(),
+  topP: z
+    .number()
+    .refine(p => Number.isFinite(p) && p > 0 && p <= 1)
+    .optional(),
+  kvBits: z
+    .number()
+    .refine(bits => SUPPORTED_KV_BITS.has(bits))
+    .optional(),
+  kvGroupSize: z.number().refine(positiveInteger).optional(),
+  maxTokens: z.number().refine(positiveInteger).optional(),
+  maxKVSize: z.number().refine(positiveInteger).optional(),
+  prefillStepSize: z.number().refine(positiveInteger).optional(),
 })
+
+const generationTuningErrors = new Map<string, string>([
+  ['seed', 'seed must be a non-negative safe integer.'],
+  ['topK', 'topK must be a non-negative integer.'],
+  ['minP', 'minP must be between 0 and 1.'],
+  ['temperature', 'temperature must be a finite number >= 0.'],
+  ['topP', 'topP must be greater than 0 and at most 1.'],
+  ['kvBits', 'kvBits must be 4 or 8 (or 0 to disable KV cache quantization).'],
+  ['kvGroupSize', 'kvGroupSize must be a positive integer.'],
+  ['maxTokens', 'maxTokens must be a positive integer.'],
+  ['maxKVSize', 'maxKVSize must be a positive integer.'],
+  ['prefillStepSize', 'prefillStepSize must be a positive integer.'],
+])
 
 function validateGenerationConfig(
   config: LLMGenerationConfig | undefined,
@@ -532,18 +609,18 @@ function validateGenerationConfig(
     return
   }
   const field = parsed.error.issues[0]?.path[0]
-  if (field === 'seed') {
-    throw new TypeError(
-      `${ERROR_PREFIX} ${name}.seed must be a non-negative safe integer.`,
-    )
-  }
-  if (field === 'topK') {
-    throw new TypeError(`${ERROR_PREFIX} ${name}.topK must be a non-negative integer.`)
-  }
-  if (field === 'minP') {
-    throw new TypeError(`${ERROR_PREFIX} ${name}.minP must be between 0 and 1.`)
+  const message =
+    field === undefined ? undefined : generationTuningErrors.get(String(field))
+  if (message) {
+    throw new TypeError(`${ERROR_PREFIX} ${name}.${message}`)
   }
   throw new TypeError(`${ERROR_PREFIX} ${name} must be an object.`)
+}
+
+export function validateTokenBatchSize(value: number | undefined, name: string): void {
+  if (value !== undefined && !positiveInteger(value)) {
+    throw new TypeError(`${ERROR_PREFIX} ${name} must be a positive integer.`)
+  }
 }
 
 export function validateTurnRequest(request: LLMTurnRequest): void {
@@ -574,13 +651,16 @@ export function validateTurnRequest(request: LLMTurnRequest): void {
       )
     }
   }
-  if (request.tools !== undefined && hasTools) {
+  if (request.tools !== undefined) {
+    // Not gated on hasTools: a non-array `tools` must fail loudly here
+    // (validateToolSchemas' first check) instead of shipping to native.
     validateToolSchemas(request.tools, 'runTurn tools')
   }
   if (request.history !== undefined) {
     validateTurnMessages(request.history, 'runTurn history', {})
   }
   validateGenerationConfig(request.generationConfig, 'runTurn generationConfig')
+  validateTokenBatchSize(request.tokenBatchSize, 'runTurn tokenBatchSize')
 }
 
 export function validateTurnContextOptions(options: LLMTurnContextOptions): void {

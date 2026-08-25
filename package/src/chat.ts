@@ -1,6 +1,12 @@
 import type { JsonObject } from './json'
 import { LLM } from './llm'
-import { assertNonEmptyString, safeJsonParse } from './runtime'
+import type { AbortSignalLike } from './runtime'
+import {
+  assertNonEmptyString,
+  safeJsonParse,
+  safeJsonParseObject,
+  throwIfAborted,
+} from './runtime'
 import type {
   GenerationStats,
   LLMContextConfig,
@@ -135,6 +141,12 @@ export interface SendMessageOptions {
   onToken?: (token: string) => void
   /** Per-call tool-call callback, invoked in addition to the session-level onToolCall. */
   onToolCall?: (toolCall: ChatToolCall) => void
+  /**
+   * Cancels this send from an `AbortController`. An abort before generation
+   * starts throws an `AbortError`; an abort mid-stream stops generation and
+   * the returned message keeps the partial content.
+   */
+  signal?: AbortSignalLike
 }
 
 export type ChatSessionListener = (state: ChatSessionState) => void
@@ -161,6 +173,9 @@ export class ChatSession {
 
   constructor(options: ChatSessionOptions) {
     assertNonEmptyString(options.modelId, 'ChatSession modelId')
+    if (options.systemPrompt !== undefined) {
+      assertNonEmptyString(options.systemPrompt, 'ChatSession systemPrompt')
+    }
     this._options = options
     this._systemPrompt = options.systemPrompt
     this._state = this._createInitialState()
@@ -218,11 +233,13 @@ export class ChatSession {
   async load(loadOptions?: ChatLoadOptions): Promise<void> {
     this._setState({ status: 'loading', lastError: null })
 
-    if (this._systemPrompt !== undefined) {
-      LLM.systemPrompt = this._systemPrompt
-    }
-
     try {
+      // Inside the try so a setter failure (validation, native init) reaches
+      // _handleError instead of wedging the session in 'loading'.
+      if (this._systemPrompt !== undefined) {
+        LLM.systemPrompt = this._systemPrompt
+      }
+
       await LLM.load(this._options.modelId, {
         onProgress: loadOptions?.onProgress,
         manageHistory: true,
@@ -369,6 +386,7 @@ export class ChatSession {
     if (!this._isLoaded) {
       throw new Error(`${ERROR_PREFIX} Call load() before sendMessage().`)
     }
+    throwIfAborted(options?.signal, 'ChatSession.sendMessage')
 
     const userMessage: UserChatMessage = {
       id: this._nextId('user'),
@@ -450,7 +468,7 @@ export class ChatSession {
           }
           break
         case 'tool_call_start': {
-          const args = safeJsonParse<JsonObject>(event.arguments, {})
+          const args = safeJsonParseObject(event.arguments, {})
           const toolCall: ChatToolCall = {
             id: event.id,
             name: event.name,
@@ -505,7 +523,9 @@ export class ChatSession {
         }
         case 'generation_outcome':
           assistantMessage.content = event.outcome.content
-          assistantMessage.thinking = event.outcome.thinking
+          // An outcome without `thinking` (e.g. a stop racing the thinking
+          // accumulator) must not wipe the trace the UI already showed.
+          assistantMessage.thinking = event.outcome.thinking ?? assistantMessage.thinking
           assistantMessage.stats = event.outcome.stats
           assistantMessage.outcome = event.outcome
           assistantMessage.error = event.outcome.error
@@ -514,11 +534,15 @@ export class ChatSession {
       }
     }
 
+    const signal = options?.signal
+    const onAbort = () => this.stop()
+    signal?.addEventListener('abort', onAbort, { once: true })
+
     try {
       // LLM.streamWithEvents wraps the event callback in its own safe-callback.
       const outcome = await LLM.streamWithEvents(content, handleEvent)
       assistantMessage.content = outcome.content
-      assistantMessage.thinking = outcome.thinking
+      assistantMessage.thinking = outcome.thinking ?? assistantMessage.thinking
       assistantMessage.stats = outcome.stats
       assistantMessage.outcome = outcome
       assistantMessage.error = outcome.error
@@ -547,6 +571,8 @@ export class ChatSession {
       assistantMessage.error = err.message
       this._handleError(err)
       throw err
+    } finally {
+      signal?.removeEventListener('abort', onAbort)
     }
   }
 

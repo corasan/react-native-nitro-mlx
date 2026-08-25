@@ -1,5 +1,5 @@
 import type { JsonObject } from './json'
-import { safeJsonParse } from './runtime'
+import { safeJsonParseObject } from './runtime'
 import type {
   GenerationStats,
   LLMGenerationConfig,
@@ -16,7 +16,10 @@ import type {
 export interface LLMToolCall {
   id: string
   name: string
-  /** Parsed arguments. The native parser produced these; malformed output never reaches here. */
+  /**
+   * Parsed arguments. Malformed JSON and JSON that is valid but not an object
+   * (`null`, a number, an array) both degrade to `{}` rather than reaching here.
+   */
   arguments: JsonObject
 }
 
@@ -127,7 +130,7 @@ function fromWireToolCall(call: LLMToolCallWire): LLMToolCall {
   return {
     id: call.id,
     name: call.name,
-    arguments: safeJsonParse<JsonObject>(call.argumentsJson, {}),
+    arguments: safeJsonParseObject(call.argumentsJson, {}),
   }
 }
 
