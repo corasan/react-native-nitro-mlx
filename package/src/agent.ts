@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { LLM } from './llm'
 import type { AbortSignalLike } from './runtime'
+import { ERROR_PREFIX, functionSchema, stringSchema } from './runtime'
 import type { LLMGenerationConfig, StreamEvent } from './specs/LLM.nitro'
 import type {
   LLMMessage,
@@ -9,8 +10,6 @@ import type {
   LLMTurnRequest,
   ToolSchema,
 } from './turn'
-
-const ERROR_PREFIX = '[react-native-nitro-mlx]'
 
 export interface ToolExecutorResult {
   content: string
@@ -53,17 +52,28 @@ export interface ToolLoopResult {
   stoppedAtMaxSteps: boolean
 }
 
-const stringResultSchema = z.string()
-const functionSchema = z.instanceof(Function)
+const executorResultSchema = z.looseObject({
+  content: z.string(),
+  isError: z.boolean().optional(),
+})
 
 function normalizeExecutorResult(value: ToolExecutorResult | string): ToolExecutorResult {
-  const parsed = stringResultSchema.safeParse(value)
-  if (parsed.success) {
-    return { content: parsed.data }
+  const asString = stringSchema.safeParse(value)
+  if (asString.success) {
+    return { content: asString.data }
   }
-  // SAFETY: the executor contract is `ToolExecutorResult | string`; a value
-  // that is not a string is the result-object arm.
-  return value as ToolExecutorResult
+  const asResult = executorResultSchema.safeParse(value)
+  if (asResult.success) {
+    return { content: asResult.data.content, isError: asResult.data.isError }
+  }
+  // A void or malformed executor return (undefined, {}, a number) must not
+  // crash the loop; surface it to the model as a failure, the same way
+  // executor exceptions are handled.
+  return {
+    content:
+      'Tool executor returned no usable result (expected a string or { content }).',
+    isError: true,
+  }
 }
 
 async function executeCall(
@@ -130,17 +140,25 @@ export async function runToolLoop(
   }
 
   let messages: LLMMessage[] = initialMessages
-  let outcome: LLMTurnOutcome | undefined
   let steps = 0
 
-  while (steps < maxSteps) {
-    outcome = await LLM.runTurn({ ...baseRequest, messages }, options.onEvent, {
+  for (;;) {
+    const outcome = await LLM.runTurn({ ...baseRequest, messages }, options.onEvent, {
       signal: options.signal,
     })
     steps += 1
 
     if (outcome.finishReason !== 'tool_calls' || outcome.toolCalls.length === 0) {
       return { outcome, steps, stoppedAtMaxSteps: false }
+    }
+
+    if (steps >= maxSteps) {
+      // Deliberately do NOT execute this round's tool calls: nothing would
+      // feed their results back, so side effects would be wasted — and in
+      // warm mode the context would be left waiting for results that never
+      // arrive. The unexecuted calls are on `outcome.toolCalls` for the
+      // caller to handle.
+      return { outcome, steps, stoppedAtMaxSteps: true }
     }
 
     const results: LLMMessage[] = []
@@ -159,9 +177,21 @@ export async function runToolLoop(
         isError: result.isError || undefined,
       })
     }
-    messages = results
-  }
 
-  // SAFETY: maxSteps >= 1, so the loop body ran and `outcome` is assigned.
-  return { outcome: outcome as LLMTurnOutcome, steps, stoppedAtMaxSteps: true }
+    if (options.contextId !== undefined) {
+      // Warm mode: the Turn Context retains the transcript natively, so the
+      // next request carries only the new tool results.
+      messages = results
+    } else {
+      // Cold mode: every native turn is stateless, so the request itself must
+      // carry the whole exchange — the prior messages, the assistant turn
+      // that made the calls, and the results. Sending only the results would
+      // hand the model orphaned tool outputs with no question attached.
+      messages = [
+        ...messages,
+        { role: 'assistant', content: outcome.content, toolCalls: outcome.toolCalls },
+        ...results,
+      ]
+    }
+  }
 }

@@ -3,9 +3,11 @@ import { LLM } from './llm'
 import type { AbortSignalLike } from './runtime'
 import {
   assertNonEmptyString,
+  ERROR_PREFIX,
   safeJsonParse,
   safeJsonParseObject,
   throwIfAborted,
+  withAbortListener,
 } from './runtime'
 import type {
   GenerationStats,
@@ -17,8 +19,6 @@ import type {
   StreamEvent,
   ToolDefinition,
 } from './specs/LLM.nitro'
-
-const ERROR_PREFIX = '[react-native-nitro-mlx]'
 
 /** Role of a chat message. */
 export type ChatRole = 'system' | 'user' | 'assistant' | 'tool'
@@ -144,7 +144,9 @@ export interface SendMessageOptions {
   /**
    * Cancels this send from an `AbortController`. An abort before generation
    * starts throws an `AbortError`; an abort mid-stream stops generation and
-   * the returned message keeps the partial content.
+   * the returned message keeps the partial content. The underlying stop is
+   * global to the Resident Model, so an abort that outlives this send can
+   * stop a later generation — prefer one controller per send.
    */
   signal?: AbortSignalLike
 }
@@ -436,6 +438,17 @@ export class ChatSession {
       }
     }
 
+    const applyOutcome = (outcome: LLMGenerationOutcome): void => {
+      assistantMessage.content = outcome.content
+      // An outcome without `thinking` (e.g. a stop racing the thinking
+      // accumulator) must not wipe the trace the UI already showed.
+      assistantMessage.thinking = outcome.thinking ?? assistantMessage.thinking
+      assistantMessage.stats = outcome.stats
+      assistantMessage.outcome = outcome
+      assistantMessage.error = outcome.error
+      this._setState({ lastStats: outcome.stats })
+    }
+
     const handleEvent = (event: StreamEvent): void => {
       switch (event.type) {
         case 'generation_start':
@@ -522,58 +535,57 @@ export class ChatSession {
           break
         }
         case 'generation_outcome':
-          assistantMessage.content = event.outcome.content
-          // An outcome without `thinking` (e.g. a stop racing the thinking
-          // accumulator) must not wipe the trace the UI already showed.
-          assistantMessage.thinking = event.outcome.thinking ?? assistantMessage.thinking
-          assistantMessage.stats = event.outcome.stats
-          assistantMessage.outcome = event.outcome
-          assistantMessage.error = event.outcome.error
-          this._setState({ lastStats: event.outcome.stats })
+          applyOutcome(event.outcome)
           break
       }
     }
 
     const signal = options?.signal
-    const onAbort = () => this.stop()
-    signal?.addEventListener('abort', onAbort, { once: true })
-
-    try {
-      // LLM.streamWithEvents wraps the event callback in its own safe-callback.
-      const outcome = await LLM.streamWithEvents(content, handleEvent)
-      assistantMessage.content = outcome.content
-      assistantMessage.thinking = outcome.thinking ?? assistantMessage.thinking
-      assistantMessage.stats = outcome.stats
-      assistantMessage.outcome = outcome
-      assistantMessage.error = outcome.error
-      assistantMessage.isStreaming = false
-      this._setState({ lastStats: outcome.stats })
-      if (outcome.finishReason === 'failed') {
-        this._handleError(new Error(outcome.error ?? 'LLM generation failed.'))
-      } else {
-        this._setState({
-          status: 'done',
-          isGenerating: false,
-          partialAssistantContent: '',
-          partialAssistantThinking: '',
-          activeToolCalls: [],
-        })
-      }
-      try {
-        this._options.onMessage?.(assistantMessage)
-      } catch {
-        // observers cannot affect turn execution
-      }
-      return assistantMessage
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error))
-      assistantMessage.isStreaming = false
-      assistantMessage.error = err.message
-      this._handleError(err)
-      throw err
-    } finally {
-      signal?.removeEventListener('abort', onAbort)
+    if (signal?.aborted) {
+      // A user callback (onMessage/onUpdate) aborted before generation
+      // started: roll the un-started exchange back and surface the abort.
+      this._messages = this._messages.filter(
+        m => m !== userMessage && m !== assistantMessage,
+      )
+      this._setState({ status: 'idle', isGenerating: false })
+      throwIfAborted(signal, 'ChatSession.sendMessage')
     }
+
+    return withAbortListener(
+      signal,
+      () => this.stop(),
+      async () => {
+        try {
+          // LLM.streamWithEvents wraps the event callback in its own safe-callback.
+          const outcome = await LLM.streamWithEvents(content, handleEvent)
+          applyOutcome(outcome)
+          assistantMessage.isStreaming = false
+          if (outcome.finishReason === 'failed') {
+            this._handleError(new Error(outcome.error ?? 'LLM generation failed.'))
+          } else {
+            this._setState({
+              status: 'done',
+              isGenerating: false,
+              partialAssistantContent: '',
+              partialAssistantThinking: '',
+              activeToolCalls: [],
+            })
+          }
+          try {
+            this._options.onMessage?.(assistantMessage)
+          } catch {
+            // observers cannot affect turn execution
+          }
+          return assistantMessage
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error))
+          assistantMessage.isStreaming = false
+          assistantMessage.error = err.message
+          this._handleError(err)
+          throw err
+        }
+      },
+    )
   }
 
   private _buildAdditionalContext(): LLMMessage[] | undefined {

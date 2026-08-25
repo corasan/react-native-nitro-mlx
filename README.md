@@ -620,10 +620,10 @@ await ModelManager.download(MLXModel.Llama_3_2_1B_Instruct_4bit, progress => {
 
 ### STT Models
 
-| Model                             | Enum Key            | Hugging Face ID                        |
-| --------------------------------- | ------------------- | -------------------------------------- |
-| **GLM-ASR (Alibaba)** - 1B params |                     |                                        |
-| GLM-ASR Nano 4-bit                | `GLM_ASR_Nano_4bit` | `mlx-community/GLM-ASR-Nano-2512-4bit` |
+| Model                           | Enum Key            | Hugging Face ID                        |
+| ------------------------------- | ------------------- | -------------------------------------- |
+| **GLM-ASR (Zhipu)** - 1B params |                     |                                        |
+| GLM-ASR Nano 4-bit              | `GLM_ASR_Nano_4bit` | `mlx-community/GLM-ASR-Nano-2512-4bit` |
 
 Browse more models at [huggingface.co/mlx-community](https://huggingface.co/mlx-community).
 

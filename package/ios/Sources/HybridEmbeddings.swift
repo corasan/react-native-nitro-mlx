@@ -69,10 +69,7 @@ class HybridEmbeddings: HybridEmbeddingsSpec {
         cachedMaxSeqLen = 0
         cachedPadTokenString = nil
         MLX.Memory.clearCache()
-        // Same rationale as HybridLLM.load: unbounded, MLX's buffer cache
-        // grows toward Metal's working-set size across repeated inference and
-        // trips iOS's Jetsam limit. Cap it for embeddings-only apps too.
-        MLX.Memory.cacheLimit = 20 * 1024 * 1024
+        MLXMemoryBudget.applyRecommendedCacheLimit()
 
         if !(await ModelDownloader.shared.isDownloaded(modelId: modelId)) {
           _ = try await ModelDownloader.shared.download(

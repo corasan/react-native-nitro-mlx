@@ -128,3 +128,90 @@ describe('runToolLoop', () => {
     ).rejects.toThrow(/maxSteps/)
   })
 })
+
+describe('runToolLoop transcript and safety contracts', () => {
+  it('accumulates the full transcript between cold-mode steps', async () => {
+    const requests: LLMMessage[][] = []
+    const spy = spyOn(LLM, 'runTurn')
+      .mockImplementationOnce(async request => {
+        requests.push(request.messages)
+        return toolCallTurn([{ id: 'a', name: 'get_time' }])
+      })
+      .mockImplementationOnce(async request => {
+        requests.push(request.messages)
+        return answerTurn('done')
+      })
+    try {
+      await runToolLoop([{ role: 'user', content: 'time?' }], {
+        get_time: () => '12:00',
+      })
+      // Cold mode: the second request must carry the question, the assistant
+      // tool-call turn, and the result — native cold turns are stateless.
+      expect(requests[1]).toEqual([
+        { role: 'user', content: 'time?' },
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [{ id: 'a', name: 'get_time', arguments: {} }],
+        },
+        {
+          role: 'tool',
+          toolCallId: 'a',
+          name: 'get_time',
+          content: '12:00',
+          isError: undefined,
+        },
+      ])
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('does not execute tools on the final maxSteps round', async () => {
+    let executions = 0
+    const spy = spyOn(LLM, 'runTurn').mockImplementation(async () =>
+      toolCallTurn([{ id: 'x', name: 'loop' }]),
+    )
+    try {
+      const result = await runToolLoop(
+        [{ role: 'user', content: 'go' }],
+        () => {
+          executions += 1
+          return 'r'
+        },
+        { maxSteps: 2 },
+      )
+      expect(result).toMatchObject({ steps: 2, stoppedAtMaxSteps: true })
+      expect(result.outcome.toolCalls).toHaveLength(1)
+      // The final round's calls are returned unexecuted, not fired-and-dropped.
+      expect(executions).toBe(1)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('converts a void executor return into an isError tool message', async () => {
+    const requests: LLMMessage[][] = []
+    const spy = spyOn(LLM, 'runTurn')
+      .mockImplementationOnce(async () => toolCallTurn([{ id: 'v', name: 'fire' }]))
+      .mockImplementationOnce(async request => {
+        requests.push(request.messages)
+        return answerTurn('ok')
+      })
+    try {
+      await runToolLoop(
+        [{ role: 'user', content: 'go' }],
+        // SAFETY: deliberately returns undefined to exercise the guard.
+        { fire: (() => undefined) as never },
+        { contextId: 'ctx' },
+      )
+      expect(requests[0]?.[0]).toMatchObject({
+        role: 'tool',
+        toolCallId: 'v',
+        isError: true,
+      })
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})

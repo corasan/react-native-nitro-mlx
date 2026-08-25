@@ -177,3 +177,34 @@ describe('ChatSession thinking preservation', () => {
     }
   })
 })
+
+describe('ChatSession abort before generation', () => {
+  it('rolls back the exchange and throws AbortError when a callback aborts', async () => {
+    const loadSpy = spyOn(LLM, 'load').mockResolvedValue(undefined)
+    const streamSpy = spyOn(LLM, 'streamWithEvents').mockImplementation(async () => {
+      throw new Error('generation must not start after a pre-start abort')
+    })
+    try {
+      const controller = new AbortController()
+      const chat = new ChatSession({
+        modelId: 'test/model',
+        onMessage: () => controller.abort(),
+      })
+      await chat.load()
+
+      let caught: unknown
+      try {
+        await chat.sendMessage('hello', { signal: controller.signal })
+      } catch (error) {
+        caught = error
+      }
+      expect(caught).toMatchObject({ name: 'AbortError' })
+      expect(streamSpy).not.toHaveBeenCalled()
+      expect(chat.messages).toHaveLength(0)
+      expect(chat.state.status).toBe('idle')
+    } finally {
+      loadSpy.mockRestore()
+      streamSpy.mockRestore()
+    }
+  })
+})

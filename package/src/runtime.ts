@@ -23,7 +23,7 @@ import type {
 } from './specs/STT.nitro'
 import type { TTSGenerateOptions, TTSLoadOptions } from './specs/TTS.nitro'
 
-const ERROR_PREFIX = '[react-native-nitro-mlx]'
+export const ERROR_PREFIX = '[react-native-nitro-mlx]'
 export const TTS_MIN_SPEED = 0.5
 export const TTS_MAX_SPEED = 2
 // SAFETY: every supported RN runtime provides a global console, but the
@@ -32,10 +32,10 @@ const runtimeConsole = (
   globalThis as { console?: { error?: (...args: unknown[]) => void } }
 ).console
 
-const stringSchema = z.string()
+export const stringSchema = z.string()
 const booleanSchema = z.boolean()
 const arrayBufferSchema = z.instanceof(ArrayBuffer)
-const functionSchema = z.instanceof(Function)
+export const functionSchema = z.instanceof(Function)
 
 /**
  * Names the runtime representation of a value for error messages. Generic so
@@ -103,6 +103,24 @@ export function throwIfAborted(signal: AbortSignalLike | undefined, name: string
     const error = new Error(`${ERROR_PREFIX} ${name} was aborted before it started.`)
     error.name = 'AbortError'
     throw error
+  }
+}
+
+/**
+ * Runs `fn` with `onAbort` attached to `signal` for its duration; the listener
+ * is removed when `fn` settles. Shared by every abortable entry point so the
+ * stop-on-abort semantics stay identical across them.
+ */
+export async function withAbortListener<T>(
+  signal: AbortSignalLike | undefined,
+  onAbort: () => void,
+  fn: () => Promise<T>,
+): Promise<T> {
+  signal?.addEventListener('abort', onAbort, { once: true })
+  try {
+    return await fn()
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
   }
 }
 
@@ -590,7 +608,7 @@ const generationTuningErrors = new Map<string, string>([
   ['minP', 'minP must be between 0 and 1.'],
   ['temperature', 'temperature must be a finite number >= 0.'],
   ['topP', 'topP must be greater than 0 and at most 1.'],
-  ['kvBits', 'kvBits must be 4 or 8 (or 0 to disable KV cache quantization).'],
+  ['kvBits', 'kvBits must be 2, 4, or 8 (or 0 to disable KV cache quantization).'],
   ['kvGroupSize', 'kvGroupSize must be a positive integer.'],
   ['maxTokens', 'maxTokens must be a positive integer.'],
   ['maxKVSize', 'maxKVSize must be a positive integer.'],
