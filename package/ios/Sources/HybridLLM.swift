@@ -1,5 +1,11 @@
 import Foundation
 import NitroModules
+import os
+
+#if canImport(UIKit)
+    import UIKit
+#endif
+
 internal import MLX
 internal import MLXLLM
 internal import MLXLMCommon
@@ -442,6 +448,40 @@ private final class HybridLLMCore {
     var debug: Bool = false
     var systemPrompt: String = "You are a helpful assistant."
 
+    private var lifecycleObservers: [NSObjectProtocol] = []
+
+    init() {
+        #if canImport(UIKit)
+            lifecycleObservers.append(
+                NotificationCenter.default.addObserver(
+                    forName: UIApplication.didEnterBackgroundNotification,
+                    object: nil, queue: nil
+                ) { [weak self] _ in
+                    // iOS refuses GPU work from backgrounded apps; stopping
+                    // the turn resolves it with `.stopped` and commits the
+                    // partial content instead of dying mid-decode.
+                    Task { @MainActor in
+                        self?.generationTasks.cancel(reason: .stopped)
+                    }
+                }
+            )
+            lifecycleObservers.append(
+                NotificationCenter.default.addObserver(
+                    forName: UIApplication.didReceiveMemoryWarningNotification,
+                    object: nil, queue: nil
+                ) { _ in
+                    Memory.clearCache()
+                }
+            )
+        #endif
+    }
+
+    deinit {
+        for observer in lifecycleObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
     private let maxToolCallDepth = 10
     private let defaultKeepLastMessages = 4
 
@@ -496,7 +536,14 @@ private final class HybridLLMCore {
 
         if result == KERN_SUCCESS {
             let usedMB = Float(taskInfo.resident_size) / 1024.0 / 1024.0
-            return String(format: "%.1f MB", usedMB)
+            #if os(iOS) || os(tvOS) || os(visionOS)
+                // The number that actually predicts an OOM kill on iOS is the
+                // remaining Jetsam budget, not the resident size.
+                let availableMB = Float(os_proc_available_memory()) / 1024.0 / 1024.0
+                return String(format: "%.1f MB used, %.1f MB before Jetsam", usedMB, availableMB)
+            #else
+                return String(format: "%.1f MB", usedMB)
+            #endif
         } else {
             return "unknown"
         }
@@ -568,17 +615,17 @@ private final class HybridLLMCore {
         enableThinking.map { ["enable_thinking": $0] }
     }
 
-    /// Sustained decode saturates the GPU and walks the device into thermal
-    /// throttling, where clocks — and with them tokens/s — drop far below what
-    /// a brief idle costs. Once iOS reports pressure, suspend the pipeline
-    /// between tokens so the GPU idles and the device sheds heat; a no-op
-    /// below `.serious`.
+    /// Sustained decode heats the chip until iOS throttles, so pace under
+    /// pressure — but between passes, not between received elements:
+    /// `streamDetails` buffers through unbounded `AsyncStream`s upstream, so
+    /// the decode loop never waits on this consumer and per-element sleeps
+    /// only delay tokens that already exist. A no-op below `.serious`.
     private func paceForThermals() async throws {
         switch ProcessInfo.processInfo.thermalState {
         case .serious:
-            try await Task.sleep(nanoseconds: 8_000_000)
+            try await Task.sleep(nanoseconds: 500_000_000)
         case .critical:
-            try await Task.sleep(nanoseconds: 24_000_000)
+            try await Task.sleep(nanoseconds: 2_000_000_000)
         default:
             break
         }
@@ -592,12 +639,23 @@ private final class HybridLLMCore {
     private static let defaultKVBits = 8
     private static let defaultQuantizedKVStart = 2048
 
+    /// Widths upstream's affine KV quantization actually supports
+    /// (`KVCache.toQuantized` -> MLX `quantized(bits:)`); anything else faults
+    /// in the Metal kernels. 0 — or any unsupported width — disables
+    /// quantization and keeps a full-precision cache.
+    private static let supportedKVBits: Set<Int> = [2, 4, 8]
+
+    private func normalizedKVBits(_ value: Double?) -> Int? {
+        guard let value else { return Self.defaultKVBits }
+        let bits = Int(value)
+        return Self.supportedKVBits.contains(bits) ? bits : nil
+    }
+
     private func buildGenerateParameters(from config: LLMGenerationConfig?) -> GenerateParameters {
         GenerateParameters(
             maxTokens: normalizedInt(config?.maxTokens, minimum: 1),
             maxKVSize: normalizedInt(config?.maxKVSize, minimum: 1),
-            kvBits: normalizedInt(config?.kvBits, minimum: 1)
-                ?? Self.defaultKVBits,
+            kvBits: normalizedKVBits(config?.kvBits),
             kvGroupSize: normalizedInt(config?.kvGroupSize, minimum: 1) ?? 64,
             quantizedKVStart: normalizedInt(config?.quantizedKVStart, minimum: 0)
                 ?? (config?.kvBits == nil ? Self.defaultQuantizedKVStart : 0),
@@ -879,12 +937,7 @@ private final class HybridLLMCore {
             await generationTasks.cancelAndWait(reason: .superseded)
             try Task.checkCancellation()
 
-            // Unbounded, MLX's buffer cache grows toward Metal's
-            // recommendedMaxWorkingSetSize during sustained generation and
-            // walks the process into iOS's Jetsam limit (observed: 2.4 GB
-            // footprint, OOM kill, no crash log). 20 MB is the mlx-swift
-            // running-on-ios recommendation for LLM evaluation.
-            Memory.cacheLimit = 20 * 1024 * 1024
+            MLXMemoryBudget.applyRecommendedCacheLimit()
 
             let action = ModelLoadPlan.action(
                 requestedModelId: modelId,
@@ -1230,8 +1283,8 @@ private final class HybridLLMCore {
             }
         }
 
+        try await paceForThermals()
         for try await generation in session.streamDetails(to: inputMessages) {
-            try await paceForThermals()
             try Task.checkCancellation()
             switch generation {
             case .chunk(let text):
@@ -1995,8 +2048,8 @@ private final class HybridLLMCore {
             }
         }
 
+        try await paceForThermals()
         for try await generation in session.streamDetails(to: inputMessages) {
-            try await paceForThermals()
             switch generation {
             case .chunk(let text):
                 progress.recordContent(

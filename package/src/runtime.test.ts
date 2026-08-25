@@ -10,6 +10,8 @@ import {
   STT_MIN_SAMPLE_RATE,
   STT_SAMPLE_RATE,
   safeJsonParse,
+  safeJsonParseObject,
+  throwIfAborted,
   TTS_MAX_SPEED,
   TTS_MIN_SPEED,
   validateEmbeddingsBatch,
@@ -331,6 +333,48 @@ describe('STT audio contract', () => {
     expect(validateSTTListeningOptions(undefined)).toBeUndefined()
     expect(validateSTTListeningOptions({ language: 'French' })).toEqual({
       language: 'French',
+    })
+  })
+})
+
+describe('safeJsonParseObject', () => {
+  it('parses a plain object', () => {
+    expect(safeJsonParseObject('{"minutes":5}', {})).toEqual({ minutes: 5 })
+  })
+
+  it('degrades valid-but-non-object JSON to the fallback', () => {
+    expect(safeJsonParseObject('null', {})).toEqual({})
+    expect(safeJsonParseObject('5', {})).toEqual({})
+    expect(safeJsonParseObject('[1]', {})).toEqual({})
+    expect(safeJsonParseObject('"x"', {})).toEqual({})
+  })
+
+  it('degrades malformed JSON to the fallback', () => {
+    expect(safeJsonParseObject('{oops', { fallback: true })).toEqual({
+      fallback: true,
+    })
+  })
+})
+
+describe('throwIfAborted', () => {
+  it('does nothing for undefined or unaborted signals', () => {
+    expect(() => throwIfAborted(undefined, 'op')).not.toThrow()
+    const controller = new AbortController()
+    expect(() => throwIfAborted(controller.signal, 'op')).not.toThrow()
+  })
+
+  it('throws an AbortError for an aborted signal', () => {
+    const controller = new AbortController()
+    controller.abort()
+    let caught: unknown
+    try {
+      throwIfAborted(controller.signal, 'LLM.runTurn')
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toMatchObject({
+      name: 'AbortError',
+      message: expect.stringContaining('LLM.runTurn'),
     })
   })
 })

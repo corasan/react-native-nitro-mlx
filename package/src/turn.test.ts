@@ -369,3 +369,157 @@ describe('LLM.runTurn', () => {
     )
   })
 })
+
+describe('extended generation config validation', () => {
+  const user = [{ role: 'user', content: 'hi' }]
+
+  it('accepts sane tuning values', () => {
+    expect(() =>
+      validateTurnRequest({
+        messages: user,
+        generationConfig: {
+          temperature: 0,
+          topP: 1,
+          kvBits: 4,
+          kvGroupSize: 64,
+          maxTokens: 512,
+          maxKVSize: 4096,
+          prefillStepSize: 512,
+        },
+      }),
+    ).not.toThrow()
+  })
+
+  it('accepts kvBits 0 as the quantization off-switch', () => {
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { kvBits: 0 } }),
+    ).not.toThrow()
+  })
+
+  it('rejects values that would brick a generation natively', () => {
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { temperature: -1 } }),
+    ).toThrow(/temperature/)
+    expect(() =>
+      validateTurnRequest({
+        messages: user,
+        generationConfig: { temperature: Number.NaN },
+      }),
+    ).toThrow(/temperature/)
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { topP: 0 } }),
+    ).toThrow(/topP/)
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { kvBits: 3 } }),
+    ).toThrow(/kvBits/)
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { maxTokens: 0 } }),
+    ).toThrow(/maxTokens/)
+    expect(() =>
+      validateTurnRequest({ messages: user, generationConfig: { kvGroupSize: -8 } }),
+    ).toThrow(/kvGroupSize/)
+    expect(() =>
+      validateTurnRequest({
+        messages: user,
+        generationConfig: { prefillStepSize: 1.5 },
+      }),
+    ).toThrow(/prefillStepSize/)
+  })
+
+  it('rejects a non-positive tokenBatchSize', () => {
+    expect(() => validateTurnRequest({ messages: user, tokenBatchSize: 0 })).toThrow(
+      /tokenBatchSize/,
+    )
+    expect(() => validateTurnRequest({ messages: user, tokenBatchSize: 2.5 })).toThrow(
+      /tokenBatchSize/,
+    )
+    expect(() => validateTurnRequest({ messages: user, tokenBatchSize: 4 })).not.toThrow()
+  })
+
+  it('rejects a non-array tools value instead of skipping validation', () => {
+    expect(() =>
+      // SAFETY: deliberately mistyped input to exercise the runtime guard.
+      validateTurnRequest({ messages: user, tools: 'not-an-array' } as never),
+    ).toThrow(/tools must be an array/)
+  })
+})
+
+describe('LLM.runTurn guards', () => {
+  it('rejects a request without a messages array using a branded error', async () => {
+    const { LLM: llm } = await import('./llm')
+    // SAFETY: deliberately mistyped input to exercise the runtime guard.
+    await expect(llm.runTurn({} as never)).rejects.toThrow(
+      /\[react-native-nitro-mlx\] runTurn messages must be an array/,
+    )
+  })
+
+  it('throws an AbortError when the signal is already aborted', async () => {
+    const { LLM: llm } = await import('./llm')
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      llm.runTurn({ messages: [{ role: 'user', content: 'hi' }] }, undefined, {
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+  })
+})
+
+const { toolResultMessage, assistantToolCallMessage, nextTurnMessages } =
+  await import('./turn')
+
+describe('transcript primitives', () => {
+  const stats = {
+    tokenCount: 1,
+    tokensPerSecond: 1,
+    timeToFirstToken: 1,
+    totalTime: 1,
+    toolExecutionTime: 0,
+  }
+  const outcome = {
+    finishReason: 'tool_calls' as const,
+    content: 'Let me check.',
+    toolCalls: [{ id: 'a', name: 'get_time', arguments: {} }],
+    usage: { promptTokens: 1, completionTokens: 1 },
+    stats,
+  }
+  const results = [toolResultMessage(outcome.toolCalls[0]!, { content: '12:00' })]
+
+  it('builds a tool result message keyed by the call id', () => {
+    expect(results[0]).toEqual({
+      role: 'tool',
+      toolCallId: 'a',
+      name: 'get_time',
+      content: '12:00',
+      isError: undefined,
+    })
+    expect(
+      toolResultMessage(outcome.toolCalls[0]!, { content: 'boom', isError: true }),
+    ).toMatchObject({ isError: true })
+  })
+
+  it('warm turns carry only the new results', () => {
+    expect(
+      nextTurnMessages({
+        contextId: 'ctx-1',
+        messages: [{ role: 'user', content: 'time?' }],
+        outcome,
+        results,
+      }),
+    ).toEqual(results)
+  })
+
+  it('cold turns carry the whole exchange', () => {
+    expect(
+      nextTurnMessages({
+        messages: [{ role: 'user', content: 'time?' }],
+        outcome,
+        results,
+      }),
+    ).toEqual([
+      { role: 'user', content: 'time?' },
+      assistantToolCallMessage(outcome),
+      ...results,
+    ])
+  })
+})

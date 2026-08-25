@@ -52,6 +52,7 @@ class HybridTTS: HybridTTSSpec {
         self.activeTask = nil
         self.model = nil
         MLX.Memory.clearCache()
+        MLXMemoryBudget.applyRecommendedCacheLimit()
 
         let loadedModel = try await TTS.loadModel(modelRepo: modelId)
 

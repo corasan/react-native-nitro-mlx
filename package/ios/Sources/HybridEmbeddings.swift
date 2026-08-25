@@ -69,6 +69,7 @@ class HybridEmbeddings: HybridEmbeddingsSpec {
         cachedMaxSeqLen = 0
         cachedPadTokenString = nil
         MLX.Memory.clearCache()
+        MLXMemoryBudget.applyRecommendedCacheLimit()
 
         if !(await ModelDownloader.shared.isDownloaded(modelId: modelId)) {
           _ = try await ModelDownloader.shared.download(

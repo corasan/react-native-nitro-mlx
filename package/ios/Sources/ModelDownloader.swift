@@ -64,8 +64,11 @@ actor ModelDownloader: NSObject {
         }
     }
 
+    // "jinja": recent HF repos ship the chat template as a standalone
+    // chat_template.jinja, which swift-transformers prefers over the copy
+    // embedded in tokenizer_config.json — omitting it loses the template.
     private let downloadableExtensions: Set<String> = [
-        "json", "safetensors", "txt", "model", "tiktoken", "py"
+        "json", "safetensors", "txt", "model", "tiktoken", "py", "jinja"
     ]
 
     private struct DownloadManifest: Codable {
@@ -206,6 +209,7 @@ actor ModelDownloader: NSObject {
         let files = try await fetchFileList(modelId: modelId)
         let modelDir = getModelDirectory(modelId: modelId)
         try fileManager.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        excludeFromBackup(modelsRootDirectory())
 
         if let manifest = readManifest(for: modelDir),
            manifest.modelId == modelId,
@@ -384,10 +388,23 @@ actor ModelDownloader: NSObject {
     }
 
     func getModelDirectory(modelId: String) -> URL {
-        let docsDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
-        return docsDir
-            .appendingPathComponent("huggingface/models")
+        modelsRootDirectory()
             .appendingPathComponent(modelId.replacingOccurrences(of: "/", with: "_"))
+    }
+
+    private func modelsRootDirectory() -> URL {
+        let docsDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return docsDir.appendingPathComponent("huggingface/models")
+    }
+
+    /// Apple's data-storage guidelines require excluding re-downloadable data
+    /// from iCloud/iTunes backup. Applied to the models root so existing
+    /// downloads are covered too; best-effort, as the flag is advisory.
+    private func excludeFromBackup(_ url: URL) {
+        var url = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
     }
 
     func deleteModel(modelId: String) throws {

@@ -27,6 +27,7 @@ export {
 } from './llm'
 export { ModelManager } from './modelManager'
 export {
+  getModelInfo,
   MLXModel,
   MLXModels,
   ModelFamily,
@@ -35,6 +36,15 @@ export {
   type ModelQuantization,
   type ModelType,
 } from './models'
+export {
+  type AbortSignalLike,
+  EMBEDDINGS_MAX_BATCH_SIZE,
+  STT_MAX_SAMPLE_RATE,
+  STT_MIN_SAMPLE_RATE,
+  STT_SAMPLE_RATE,
+  TTS_MAX_SPEED,
+  TTS_MIN_SPEED,
+} from './runtime'
 export type {
   Embeddings as EmbeddingsSpec,
   EmbeddingsEmbedOptions,
@@ -83,13 +93,16 @@ export type { JsonObject, JsonValue } from './json'
 export { STT } from './stt'
 export { createTool, type TypeSafeToolDefinition } from './tool-utils'
 export { TTS } from './tts'
-export type {
-  LLMContext,
-  LLMContextOptions,
-  LLMMessage,
-  LLMTokenCountRequest,
-  LLMToolCall,
-  LLMTurnOutcome,
-  LLMTurnRequest,
-  ToolSchema,
+export {
+  assistantToolCallMessage,
+  type LLMContext,
+  type LLMContextOptions,
+  type LLMMessage,
+  type LLMTokenCountRequest,
+  type LLMToolCall,
+  type LLMTurnOutcome,
+  type LLMTurnRequest,
+  nextTurnMessages,
+  toolResultMessage,
+  type ToolSchema,
 } from './turn'

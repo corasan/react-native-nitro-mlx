@@ -53,6 +53,7 @@ class HybridSTT: HybridSTTSpec {
         self.activeTask = nil
         self.model = nil
         MLX.Memory.clearCache()
+        MLXMemoryBudget.applyRecommendedCacheLimit()
 
         let loadedModel = try await Qwen3ASRModel.fromPretrained(modelId)
 

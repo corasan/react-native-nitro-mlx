@@ -18,6 +18,7 @@ export enum ModelProvider {
   HuggingFace = 'HuggingFace',
   Apple = 'Apple',
   Kyutai = 'Kyutai',
+  Zhipu = 'Zhipu',
 }
 
 export type ModelQuantization = '4bit' | '8bit' | 'bf16'
@@ -432,7 +433,7 @@ export const MLXModels: ModelInfo[] = [
   {
     id: MLXModel.GLM_ASR_Nano_4bit,
     family: ModelFamily.GLMASR,
-    provider: ModelProvider.Alibaba,
+    provider: ModelProvider.Zhipu,
     parameters: '1B',
     quantization: '4bit',
     displayName: 'GLM-ASR Nano (4-bit)',
@@ -450,3 +451,14 @@ export const MLXModels: ModelInfo[] = [
     type: 'stt',
   },
 ]
+
+const MODEL_INFO_BY_ID = new Map<string, ModelInfo>(MLXModels.map(m => [m.id, m]))
+
+/**
+ * Look up the curated {@link ModelInfo} for a model id, if the package knows
+ * it. Useful for byte-accurate download progress:
+ * `progress * getModelInfo(id).downloadSize`.
+ */
+export function getModelInfo(modelId: string): ModelInfo | undefined {
+  return MODEL_INFO_BY_ID.get(modelId)
+}
