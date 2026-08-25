@@ -249,7 +249,8 @@ export interface LLMGenerationConfig {
   /** Sliding-window KV cache size. When set, old cache entries are rotated out */
   maxKVSize?: number
   /**
-   * KV cache quantization bits. Use 4 or 8 to reduce cache memory usage.
+   * KV cache quantization bits. Use 4 or 8 to reduce cache memory usage,
+   * or 0 to disable quantization and keep a full-precision cache.
    * @default 8
    */
   kvBits?: number

@@ -17,6 +17,13 @@ export {
   type ToolChatMessage,
   type UserChatMessage,
 } from './chat'
+export {
+  runToolLoop,
+  type RunToolLoopOptions,
+  type ToolExecutor,
+  type ToolExecutorResult,
+  type ToolLoopResult,
+} from './agent'
 export { cosineSimilarity, Embeddings } from './embeddings'
 export {
   type EventCallback,
@@ -27,6 +34,7 @@ export {
 } from './llm'
 export { ModelManager } from './modelManager'
 export {
+  getModelInfo,
   MLXModel,
   MLXModels,
   ModelFamily,
@@ -35,6 +43,15 @@ export {
   type ModelQuantization,
   type ModelType,
 } from './models'
+export {
+  type AbortSignalLike,
+  EMBEDDINGS_MAX_BATCH_SIZE,
+  STT_MAX_SAMPLE_RATE,
+  STT_MIN_SAMPLE_RATE,
+  STT_SAMPLE_RATE,
+  TTS_MAX_SPEED,
+  TTS_MIN_SPEED,
+} from './runtime'
 export type {
   Embeddings as EmbeddingsSpec,
   EmbeddingsEmbedOptions,
